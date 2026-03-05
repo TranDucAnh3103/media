@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#8b5cf6"/>
+      <stop offset="100%" style="stop-color:#d946ef"/>
+    </linearGradient>
+  </defs>
+  <!-- Background circle -->
+  <circle cx="50" cy="50" r="45" fill="url(#grad)"/>
+  <!-- Play button (video) -->
+  <path d="M38 30 L38 70 L68 50 Z" fill="white" opacity="0.9"/>
+  <!-- Book pages (comic) hint -->
+  <rect x="25" y="65" width="12" height="16" rx="1" fill="white" opacity="0.7" transform="rotate(-15, 31, 73)"/>
+  <rect x="30" y="63" width="12" height="16" rx="1" fill="white" opacity="0.85" transform="rotate(-5, 36, 71)"/>
+</svg>
