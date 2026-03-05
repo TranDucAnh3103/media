@@ -48,7 +48,6 @@ temp/
 
 # Go
 *.test
-go.sum
 
 # Debug
 debug/
