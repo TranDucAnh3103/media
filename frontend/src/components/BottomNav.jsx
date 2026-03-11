@@ -36,8 +36,8 @@ const BottomNav = () => {
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden">
-      {/* Blur background */}
-      <div className="absolute inset-0 bg-black/80 backdrop-blur-xl border-t border-white/10" />
+      {/* Blur background - must be pointer-events-none to allow clicks through */}
+      <div className="absolute inset-0 bg-black/80 backdrop-blur-xl border-t border-white/10 pointer-events-none" />
       
       {/* Safe area padding for iPhone notch */}
       <div className="relative flex items-center justify-around h-16 pb-safe">

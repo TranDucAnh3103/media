@@ -62,6 +62,7 @@ func SetupRoutes(app *fiber.App) {
 	user.Put("/profile", userController.UpdateProfile)
 	user.Post("/bookmarks", userController.AddBookmark)
 	user.Delete("/bookmarks/:contentId", userController.RemoveBookmark)
+	user.Delete("/liked/:type/:contentId", userController.RemoveLike)
 	user.Post("/playlists", userController.CreatePlaylist)
 	user.Post("/playlists/:playlistId/videos", userController.AddToPlaylist)
 

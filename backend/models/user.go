@@ -51,15 +51,17 @@ type WatchHistoryItem struct {
 
 // UserResponse - Response không bao gồm password
 type UserResponse struct {
-	ID           primitive.ObjectID `json:"id"`
-	Username     string             `json:"username"`
-	Email        string             `json:"email"`
-	Avatar       string             `json:"avatar"`
-	Role         string             `json:"role"`
-	Bookmarks    []Bookmark         `json:"bookmarks"`
-	Playlists    []Playlist         `json:"playlists"`
-	WatchHistory []WatchHistoryItem `json:"watch_history"`
-	CreatedAt    time.Time          `json:"created_at"`
+	ID           primitive.ObjectID   `json:"id"`
+	Username     string               `json:"username"`
+	Email        string               `json:"email"`
+	Avatar       string               `json:"avatar"`
+	Role         string               `json:"role"`
+	LikedVideos  []primitive.ObjectID `json:"liked_videos"`
+	LikedComics  []primitive.ObjectID `json:"liked_comics"`
+	Bookmarks    []Bookmark           `json:"bookmarks"`
+	Playlists    []Playlist           `json:"playlists"`
+	WatchHistory []WatchHistoryItem   `json:"watch_history"`
+	CreatedAt    time.Time            `json:"created_at"`
 }
 
 // LoginRequest - Request đăng nhập
@@ -83,6 +85,8 @@ func (u *User) ToResponse() UserResponse {
 		Email:        u.Email,
 		Avatar:       u.Avatar,
 		Role:         u.Role,
+		LikedVideos:  u.LikedVideos,
+		LikedComics:  u.LikedComics,
 		Bookmarks:    u.Bookmarks,
 		Playlists:    u.Playlists,
 		WatchHistory: u.WatchHistory,

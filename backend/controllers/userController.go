@@ -155,7 +155,7 @@ func (c *UserController) Login(ctx *fiber.Ctx) error {
 	})
 }
 
-// GetProfile - Lấy thông tin profile
+// GetProfile - Lấy thông tin profile với bookmarks và liked content đã populated
 // GET /api/user/profile
 func (c *UserController) GetProfile(ctx *fiber.Ctx) error {
 	userID := ctx.Locals("userID").(string)
@@ -167,7 +167,7 @@ func (c *UserController) GetProfile(ctx *fiber.Ctx) error {
 		})
 	}
 
-	dbCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	dbCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
 	var user models.User
@@ -178,7 +178,90 @@ func (c *UserController) GetProfile(ctx *fiber.Ctx) error {
 		})
 	}
 
-	return ctx.JSON(user.ToResponse())
+	// Populate bookmarks with content data
+	populatedBookmarks := make([]map[string]interface{}, 0)
+	for _, bookmark := range user.Bookmarks {
+		bookmarkData := map[string]interface{}{
+			"content_id":   bookmark.ContentID,
+			"content_type": bookmark.ContentType,
+			"page":         bookmark.Page,
+			"chapter":      bookmark.Chapter,
+			"timestamp":    bookmark.Timestamp,
+			"created_at":   bookmark.CreatedAt,
+		}
+
+		if bookmark.ContentType == "video" {
+			var video models.Video
+			if err := services.VideosCollection.FindOne(dbCtx, bson.M{"_id": bookmark.ContentID}).Decode(&video); err == nil {
+				bookmarkData["title"] = video.Title
+				bookmarkData["thumbnail"] = video.Thumbnail
+			}
+		} else if bookmark.ContentType == "comic" {
+			var comic models.Comic
+			if err := services.ComicsCollection.FindOne(dbCtx, bson.M{"_id": bookmark.ContentID}).Decode(&comic); err == nil {
+				bookmarkData["title"] = comic.Title
+				bookmarkData["thumbnail"] = comic.CoverImage
+			}
+		}
+		populatedBookmarks = append(populatedBookmarks, bookmarkData)
+	}
+
+	// Populate liked videos
+	likedVideos := make([]map[string]interface{}, 0)
+	if len(user.LikedVideos) > 0 {
+		cursor, err := services.VideosCollection.Find(dbCtx, bson.M{"_id": bson.M{"$in": user.LikedVideos}})
+		if err == nil {
+			var videos []models.Video
+			cursor.All(dbCtx, &videos)
+			for _, video := range videos {
+				likedVideos = append(likedVideos, map[string]interface{}{
+					"id":           video.ID,
+					"content_type": "video",
+					"title":        video.Title,
+					"thumbnail":    video.Thumbnail,
+					"views":        video.Views,
+					"duration":     video.Duration,
+				})
+			}
+		}
+	}
+
+	// Populate liked comics
+	likedComics := make([]map[string]interface{}, 0)
+	if len(user.LikedComics) > 0 {
+		cursor, err := services.ComicsCollection.Find(dbCtx, bson.M{"_id": bson.M{"$in": user.LikedComics}})
+		if err == nil {
+			var comics []models.Comic
+			cursor.All(dbCtx, &comics)
+			for _, comic := range comics {
+				likedComics = append(likedComics, map[string]interface{}{
+					"id":           comic.ID,
+					"content_type": "comic",
+					"title":        comic.Title,
+					"thumbnail":    comic.CoverImage,
+					"views":        comic.Views,
+				})
+			}
+		}
+	}
+
+	// Combine liked content
+	liked := append(likedVideos, likedComics...)
+
+	return ctx.JSON(fiber.Map{
+		"id":            user.ID,
+		"username":      user.Username,
+		"email":         user.Email,
+		"avatar":        user.Avatar,
+		"role":          user.Role,
+		"bookmarks":     populatedBookmarks,
+		"liked":         liked,
+		"liked_videos":  user.LikedVideos,
+		"liked_comics":  user.LikedComics,
+		"playlists":     user.Playlists,
+		"watch_history": user.WatchHistory,
+		"created_at":    user.CreatedAt,
+	})
 }
 
 // UpdateProfile - Cập nhật profile
@@ -314,6 +397,69 @@ func (c *UserController) RemoveBookmark(ctx *fiber.Ctx) error {
 
 	return ctx.JSON(fiber.Map{
 		"message": "Bookmark removed successfully",
+	})
+}
+
+// RemoveLike - Xóa like video hoặc comic
+// DELETE /api/user/liked/:type/:contentId
+// type = "video" hoặc "comic"
+func (c *UserController) RemoveLike(ctx *fiber.Ctx) error {
+	userID := ctx.Locals("userID").(string)
+	contentType := ctx.Params("type")
+	contentID := ctx.Params("contentId")
+
+	objID, err := primitive.ObjectIDFromHex(userID)
+	if err != nil {
+		return ctx.Status(400).JSON(fiber.Map{
+			"error": "Invalid user ID",
+		})
+	}
+
+	contentObjID, err := primitive.ObjectIDFromHex(contentID)
+	if err != nil {
+		return ctx.Status(400).JSON(fiber.Map{
+			"error": "Invalid content ID",
+		})
+	}
+
+	dbCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	var field string
+	if contentType == "video" {
+		field = "liked_videos"
+	} else if contentType == "comic" {
+		field = "liked_comics"
+	} else {
+		return ctx.Status(400).JSON(fiber.Map{
+			"error": "Invalid content type. Must be 'video' or 'comic'",
+		})
+	}
+
+	// Remove from user's liked list
+	_, err = services.UsersCollection.UpdateOne(dbCtx, bson.M{"_id": objID}, bson.M{
+		"$pull": bson.M{field: contentObjID},
+		"$set":  bson.M{"updated_at": time.Now()},
+	})
+	if err != nil {
+		return ctx.Status(500).JSON(fiber.Map{
+			"error": "Failed to remove like",
+		})
+	}
+
+	// Decrement like count on the content
+	if contentType == "video" {
+		services.VideosCollection.UpdateOne(dbCtx, bson.M{"_id": contentObjID}, bson.M{
+			"$inc": bson.M{"likes": -1},
+		})
+	} else {
+		services.ComicsCollection.UpdateOne(dbCtx, bson.M{"_id": contentObjID}, bson.M{
+			"$inc": bson.M{"likes": -1},
+		})
+	}
+
+	return ctx.JSON(fiber.Map{
+		"message": "Like removed successfully",
 	})
 }
 

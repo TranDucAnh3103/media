@@ -131,6 +131,7 @@ export const userAPI = {
   addBookmark: (data) => api.post('/user/bookmarks', data),
   removeBookmark: (contentId) => api.delete(`/user/bookmarks/${contentId}`),
   getBookmarks: () => api.get('/user/bookmarks'),
+  removeLike: (type, contentId) => api.delete(`/user/liked/${type}/${contentId}`),
   createPlaylist: (name) => api.post('/user/playlists', { name }),
   getPlaylists: () => api.get('/user/playlists'),
   addToPlaylist: (playlistId, videoId) => 

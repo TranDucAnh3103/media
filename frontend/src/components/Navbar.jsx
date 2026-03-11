@@ -42,8 +42,8 @@ const Navbar = () => {
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 hidden md:block">
-      {/* Glass morphism background */}
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-2xl border-b border-white/5" />
+      {/* Glass morphism background - pointer-events-none to allow clicks through */}
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-2xl border-b border-white/5 pointer-events-none" />
       
       <nav className="relative container-custom">
         <div className="flex items-center justify-between h-16">

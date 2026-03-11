@@ -10,12 +10,24 @@ import {
   PlayIcon,
   Squares2X2Icon,
   ArrowRightOnRectangleIcon,
+  FilmIcon,
+  BookOpenIcon,
 } from '@heroicons/react/24/outline'
 import toast from 'react-hot-toast'
-import VideoCard from '../components/VideoCard'
-import ComicCard from '../components/ComicCard'
 import { userAPI } from '../services/api'
 import { useAuthStore } from '../store/authStore'
+
+// Helper function to format duration
+const formatDuration = (seconds) => {
+  if (!seconds) return ''
+  const hrs = Math.floor(seconds / 3600)
+  const mins = Math.floor((seconds % 3600) / 60)
+  const secs = Math.floor(seconds % 60)
+  if (hrs > 0) {
+    return `${hrs}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
+  }
+  return `${mins}:${secs.toString().padStart(2, '0')}`
+}
 
 // User profile page
 const Profile = () => {
@@ -51,11 +63,22 @@ const Profile = () => {
 
   // Remove bookmark mutation
   const removeBookmarkMutation = useMutation({
-    mutationFn: (bookmarkId) => userAPI.removeBookmark(bookmarkId),
+    mutationFn: (contentId) => userAPI.removeBookmark(contentId),
     onSuccess: () => {
       toast.success('Đã xóa bookmark')
-      queryClient.invalidateQueries(['user', 'profile'])
+      queryClient.invalidateQueries({ queryKey: ['user', 'profile'] })
     },
+    onError: () => toast.error('Xóa bookmark thất bại'),
+  })
+
+  // Remove like mutation
+  const removeLikeMutation = useMutation({
+    mutationFn: ({ type, contentId }) => userAPI.removeLike(type, contentId),
+    onSuccess: () => {
+      toast.success('Đã bỏ thích')
+      queryClient.invalidateQueries({ queryKey: ['user', 'profile'] })
+    },
+    onError: () => toast.error('Bỏ thích thất bại'),
   })
 
   // Clear history mutation
@@ -63,7 +86,7 @@ const Profile = () => {
     mutationFn: () => userAPI.clearHistory(),
     onSuccess: () => {
       toast.success('Đã xóa lịch sử')
-      queryClient.invalidateQueries(['user', 'profile'])
+      queryClient.invalidateQueries({ queryKey: ['user', 'profile'] })
     },
   })
 
@@ -241,48 +264,78 @@ const Profile = () => {
         <div>
           <h2 className="text-xl font-bold text-white mb-4">Đã đánh dấu</h2>
           {profile?.bookmarks?.length > 0 ? (
-            <div className="space-y-4">
-              {profile.bookmarks.map((bookmark) => (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {profile.bookmarks.map((bookmark, index) => (
                 <div 
-                  key={bookmark.id}
-                  className="bg-gray-800 rounded-lg p-4 flex items-center gap-4"
+                  key={bookmark.content_id || index}
+                  className="bg-gray-800 rounded-xl overflow-hidden group hover:bg-gray-750 transition-colors"
                 >
                   <Link 
                     to={bookmark.content_type === 'video' 
                       ? `/videos/${bookmark.content_id}` 
                       : `/comics/${bookmark.content_id}`}
-                    className="flex-1 flex items-center gap-4"
+                    className="block"
                   >
-                    <img
-                      src={bookmark.thumbnail || '/placeholder.png'}
-                      alt={bookmark.title}
-                      className={`object-cover rounded ${
-                        bookmark.content_type === 'video' ? 'w-32 h-20' : 'w-14 h-20'
-                      }`}
-                    />
-                    <div>
-                      <h3 className="text-white font-medium">{bookmark.title}</h3>
-                      <p className="text-sm text-gray-400">
+                    <div className="relative aspect-video bg-gray-700">
+                      {bookmark.thumbnail ? (
+                        <img
+                          src={bookmark.thumbnail}
+                          alt={bookmark.title}
+                          className="w-full h-full object-cover"
+                          onError={(e) => { e.target.src = '/placeholder.png' }}
+                        />
+                      ) : (
+                        <div className="flex items-center justify-center h-full">
+                          {bookmark.content_type === 'video' ? (
+                            <FilmIcon className="w-12 h-12 text-gray-600" />
+                          ) : (
+                            <BookOpenIcon className="w-12 h-12 text-gray-600" />
+                          )}
+                        </div>
+                      )}
+                      <div className="absolute top-2 left-2 px-2 py-1 bg-black/60 rounded text-xs text-white">
                         {bookmark.content_type === 'video' ? 'Video' : 'Truyện'}
-                        {bookmark.chapter && ` • Chapter ${bookmark.chapter}`}
-                        {bookmark.page && ` • Trang ${bookmark.page}`}
-                      </p>
-                      <p className="text-xs text-gray-500 mt-1">
-                        {formatDate(bookmark.created_at)}
-                      </p>
+                      </div>
                     </div>
                   </Link>
-                  <button
-                    onClick={() => removeBookmarkMutation.mutate(bookmark.id)}
-                    className="p-2 text-gray-400 hover:text-red-400 hover:bg-red-500/20 rounded"
-                  >
-                    <TrashIcon className="w-5 h-5" />
-                  </button>
+                  <div className="p-4">
+                    <div className="flex items-start justify-between gap-2">
+                      <Link 
+                        to={bookmark.content_type === 'video' 
+                          ? `/videos/${bookmark.content_id}` 
+                          : `/comics/${bookmark.content_id}`}
+                        className="flex-1"
+                      >
+                        <h3 className="text-white font-medium line-clamp-2 group-hover:text-violet-400 transition-colors">
+                          {bookmark.title || 'Không có tiêu đề'}
+                        </h3>
+                        <p className="text-sm text-gray-400 mt-1">
+                          {bookmark.chapter && `Chapter ${bookmark.chapter}`}
+                          {bookmark.page && ` • Trang ${bookmark.page}`}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {formatDate(bookmark.created_at)}
+                        </p>
+                      </Link>
+                      <button
+                        onClick={() => removeBookmarkMutation.mutate(bookmark.content_id)}
+                        disabled={removeBookmarkMutation.isPending}
+                        className="p-2 text-gray-400 hover:text-red-400 hover:bg-red-500/20 rounded-lg transition-colors shrink-0"
+                        title="Xóa bookmark"
+                      >
+                        <TrashIcon className="w-5 h-5" />
+                      </button>
+                    </div>
+                  </div>
                 </div>
               ))}
             </div>
           ) : (
-            <p className="text-gray-500 text-center py-8">Chưa có bookmark nào</p>
+            <div className="text-center py-12">
+              <BookmarkIcon className="w-16 h-16 text-gray-600 mx-auto mb-4" />
+              <p className="text-gray-500">Chưa có bookmark nào</p>
+              <p className="text-sm text-gray-600 mt-1">Đánh dấu video hoặc truyện để xem sau</p>
+            </div>
           )}
         </div>
       )}
@@ -379,17 +432,81 @@ const Profile = () => {
         <div>
           <h2 className="text-xl font-bold text-white mb-4">Đã thích</h2>
           {profile?.liked?.length > 0 ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-              {profile.liked.map((item) => (
-                item.content_type === 'video' ? (
-                  <VideoCard key={item.id} video={item.content} />
-                ) : (
-                  <ComicCard key={item.id} comic={item.content} />
-                )
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {profile.liked.map((item, index) => (
+                <div 
+                  key={item.id || index}
+                  className="bg-gray-800 rounded-xl overflow-hidden group hover:bg-gray-750 transition-colors"
+                >
+                  <Link 
+                    to={item.content_type === 'video' 
+                      ? `/videos/${item.id}` 
+                      : `/comics/${item.id}`}
+                    className="block"
+                  >
+                    <div className="relative aspect-video bg-gray-700">
+                      {item.thumbnail ? (
+                        <img
+                          src={item.thumbnail}
+                          alt={item.title}
+                          className="w-full h-full object-cover"
+                          onError={(e) => { e.target.src = '/placeholder.png' }}
+                        />
+                      ) : (
+                        <div className="flex items-center justify-center h-full">
+                          {item.content_type === 'video' ? (
+                            <FilmIcon className="w-12 h-12 text-gray-600" />
+                          ) : (
+                            <BookOpenIcon className="w-12 h-12 text-gray-600" />
+                          )}
+                        </div>
+                      )}
+                      <div className="absolute top-2 left-2 px-2 py-1 bg-black/60 rounded text-xs text-white">
+                        {item.content_type === 'video' ? 'Video' : 'Truyện'}
+                      </div>
+                    </div>
+                  </Link>
+                  <div className="p-4">
+                    <div className="flex items-start justify-between gap-2">
+                      <Link 
+                        to={item.content_type === 'video' 
+                          ? `/videos/${item.id}` 
+                          : `/comics/${item.id}`}
+                        className="flex-1"
+                      >
+                        <h3 className="text-white font-medium line-clamp-2 group-hover:text-violet-400 transition-colors">
+                          {item.title || 'Không có tiêu đề'}
+                        </h3>
+                        {item.content_type === 'video' && item.duration && (
+                          <p className="text-sm text-gray-400 mt-1">
+                            {formatDuration(item.duration)}
+                          </p>
+                        )}
+                        {item.views !== undefined && (
+                          <p className="text-xs text-gray-500 mt-1">
+                            {item.views} lượt xem
+                          </p>
+                        )}
+                      </Link>
+                      <button
+                        onClick={() => removeLikeMutation.mutate({ type: item.content_type, contentId: item.id })}
+                        disabled={removeLikeMutation.isPending}
+                        className="p-2 text-gray-400 hover:text-red-400 hover:bg-red-500/20 rounded-lg transition-colors shrink-0"
+                        title="Bỏ thích"
+                      >
+                        <HeartIcon className="w-5 h-5" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
               ))}
             </div>
           ) : (
-            <p className="text-gray-500 text-center py-8">Chưa thích nội dung nào</p>
+            <div className="text-center py-12">
+              <HeartIcon className="w-16 h-16 text-gray-600 mx-auto mb-4" />
+              <p className="text-gray-500">Chưa thích nội dung nào</p>
+              <p className="text-sm text-gray-600 mt-1">Thích video hoặc truyện để xem lại sau</p>
+            </div>
           )}
         </div>
       )}
