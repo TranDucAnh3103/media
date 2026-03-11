@@ -31,17 +31,12 @@ func main() {
 	// Middleware
 	app.Use(logger.New())
 
-	// CORS - lấy từ env hoặc mặc định cho dev
-	allowedOrigins := os.Getenv("CORS_ORIGINS")
-	if allowedOrigins == "" {
-		allowedOrigins = "http://localhost:5173,http://localhost:3000"
-	}
-
+	// CORS - Allow all origins for API access
 	app.Use(cors.New(cors.Config{
-		AllowOrigins:     allowedOrigins,
+		AllowOrigins:     "*",
 		AllowHeaders:     "Origin, Content-Type, Accept, Authorization",
-		AllowMethods:     "GET, POST, PUT, DELETE, OPTIONS",
-		AllowCredentials: true,
+		AllowMethods:     "GET, POST, PUT, DELETE, OPTIONS, PATCH",
+		AllowCredentials: false, // Must be false when AllowOrigins is "*"
 	}))
 
 	// WebSocket endpoint cho realtime notifications
