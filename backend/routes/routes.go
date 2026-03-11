@@ -29,6 +29,17 @@ func SetupRoutes(app *fiber.App) {
 	comicController := controllers.NewComicController()
 	videoController := controllers.NewVideoController()
 
+	// Start Telegram persistent connection - BLOCKING (required for video upload/streaming)
+	fmt.Println("[Routes] Initializing Telegram connection...")
+	ctx := context.Background()
+	if err := videoController.InitTelegramConnection(ctx); err != nil {
+		fmt.Printf("[Routes] ⚠️  Telegram connection failed: %v\n", err)
+		fmt.Println("[Routes] ⚠️  Video upload and streaming will NOT work!")
+		fmt.Println("[Routes] ⚠️  Check TELEGRAM_* environment variables in .env")
+	} else {
+		fmt.Println("[Routes] ✅ Telegram connection ready - video upload/streaming enabled")
+	}
+
 	// API group
 	api := app.Group("/api")
 
@@ -79,24 +90,30 @@ func SetupRoutes(app *fiber.App) {
 	// ============ VIDEO ROUTES ============
 	videos := api.Group("/videos")
 
-	// Protected routes that need auth (MUST come first before :id)
-	videosProtected := videos.Group("", middleware.AuthMiddleware())
-	videosProtected.Get("/my", videoController.GetMyVideos)
-	videosProtected.Post("/upload", videoController.UploadVideo)
+	// IMPORTANT: Routes are matched in registration order!
+	// Specific paths MUST be registered BEFORE dynamic :id routes
 
-	// Public routes (specific paths first)
+	// PUBLIC routes (no authentication required)
 	videos.Get("/trending", videoController.GetTrending)
 	videos.Get("/latest", videoController.GetLatest)
 	videos.Get("/upload/progress/:id", videoController.GetUploadProgress)
-	videos.Get("/stream/mega/:hash", videoController.StreamMegaVideo) // Mega video streaming
+	videos.Get("/telegram/status", videoController.GetTelegramStatus) // Telegram status check
+	videos.Get("/stream/mega/:hash", videoController.StreamMegaVideo) // Mega streaming (legacy)
+	videos.Get("/stream/:id", videoController.StreamVideo)            // Unified streaming (Telegram/Cloudinary/Mega)
+
+	// PROTECTED routes with specific paths (must come before /:id)
+	videos.Get("/my", middleware.AuthMiddleware(), videoController.GetMyVideos)
+	videos.Post("/upload", middleware.AuthMiddleware(), videoController.UploadVideo)
+
+	// PUBLIC routes with dynamic :id
 	videos.Get("/", videoController.GetVideos)
 	videos.Get("/:id", videoController.GetVideo)
 
-	// Protected routes for existing videos
-	videosProtected.Put("/:id", videoController.UpdateVideo)
-	videosProtected.Delete("/:id", videoController.DeleteVideo)
-	videosProtected.Post("/:id/like", videoController.LikeVideo)
-	videosProtected.Post("/:id/comments", videoController.AddComment)
+	// PROTECTED routes with dynamic :id (different HTTP methods, so no conflict)
+	videos.Put("/:id", middleware.AuthMiddleware(), videoController.UpdateVideo)
+	videos.Delete("/:id", middleware.AuthMiddleware(), videoController.DeleteVideo)
+	videos.Post("/:id/like", middleware.AuthMiddleware(), videoController.LikeVideo)
+	videos.Post("/:id/comments", middleware.AuthMiddleware(), videoController.AddComment)
 
 	// ============ ADMIN ROUTES ============
 	admin := api.Group("/admin", middleware.AuthMiddleware())

@@ -1,0 +1,27 @@
+# Binaries
+*.exe
+batch_video_uploader
+
+# Session files
+# telegram_session/
+# *.session
+
+# Environment
+.env
+.env.local
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Videos folder (keep README)
+videos/
+!videos/README.md
+
+# Comics folder (keep README)
+comics/
+!comics/README.md

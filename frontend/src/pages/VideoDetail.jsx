@@ -2,13 +2,41 @@ import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { HandThumbUpIcon, BookmarkIcon, ShareIcon, EyeIcon } from '@heroicons/react/24/outline'
 import { HandThumbUpIcon as HandThumbUpSolidIcon } from '@heroicons/react/24/solid'
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import toast from 'react-hot-toast'
 import Player from '../components/Player'
 import VideoCard from '../components/VideoCard'
 import MobileHeader from '../components/MobileHeader'
 import { videosAPI, userAPI } from '../services/api'
 import { useAuthStore } from '../store/authStore'
+
+// Helper: Extract keywords from title for matching
+const extractKeywords = (title) => {
+  if (!title) return []
+  // Remove common words and split into keywords
+  const stopWords = ['video', 'clip', 'phim', 'và', 'của', 'trong', 'với', 'cho', 'các', 'những', 'được', 'là', 'có', 'để', 'một', 'này', 'khi', 'từ', 'theo', 'như', 'đã', 'vì', 'tại', 'về', 'ra', 'lên', 'hơn', 'nên', 'làm', 'đến']
+  return title
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ') // Keep letters, numbers, spaces (Unicode aware)
+    .split(/\s+/)
+    .filter(word => word.length > 2 && !stopWords.includes(word))
+}
+
+// Helper: Calculate relevance score between two videos
+const calculateRelevance = (video, targetKeywords) => {
+  if (!video?.title || !targetKeywords?.length) return 0
+  const videoKeywords = extractKeywords(video.title)
+  let score = 0
+  for (const keyword of targetKeywords) {
+    if (videoKeywords.some(vk => vk.includes(keyword) || keyword.includes(vk))) {
+      score += 2 // Exact or partial match
+    }
+    if (video.title.toLowerCase().includes(keyword)) {
+      score += 1 // Title contains keyword
+    }
+  }
+  return score
+}
 
 // Video detail page với player và comments
 const VideoDetail = () => {
@@ -25,13 +53,38 @@ const VideoDetail = () => {
     select: (res) => res.data,
   })
 
-  // Fetch related videos
-  const { data: relatedVideos } = useQuery({
-    queryKey: ['videos', 'related', video?.genres?.[0]],
-    queryFn: () => videosAPI.getAll({ genres: video?.genres?.[0], limit: 8 }),
-    select: (res) => res.data.videos?.filter(v => v.id !== id),
-    enabled: !!video?.genres?.length,
+  // Fetch latest videos for related section (always fetch)
+  const { data: latestVideos } = useQuery({
+    queryKey: ['videos', 'latest', 20],
+    queryFn: () => videosAPI.getLatest(20),
+    select: (res) => res.data?.filter(v => v.id !== id) || [],
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
   })
+
+  // Calculate related videos based on title similarity + latest
+  const relatedVideos = useMemo(() => {
+    if (!latestVideos?.length) return []
+    if (!video?.title) return latestVideos.slice(0, 8)
+
+    const keywords = extractKeywords(video.title)
+    
+    // Score each video by relevance
+    const scoredVideos = latestVideos.map(v => ({
+      ...v,
+      relevanceScore: calculateRelevance(v, keywords)
+    }))
+
+    // Sort by relevance first, then by created_at (newest first)
+    scoredVideos.sort((a, b) => {
+      if (b.relevanceScore !== a.relevanceScore) {
+        return b.relevanceScore - a.relevanceScore
+      }
+      // If same relevance, sort by date
+      return new Date(b.created_at) - new Date(a.created_at)
+    })
+
+    return scoredVideos.slice(0, 8)
+  }, [video?.title, latestVideos, id])
 
   // Like mutation
   const likeMutation = useMutation({
@@ -127,9 +180,7 @@ const VideoDetail = () => {
             {/* Player */}
           <div className="mb-4">
             <Player
-              url={video.storage_type === 'mega' && video.mega_hash 
-                ? `${import.meta.env.VITE_API_URL || ''}/api/videos/stream/mega/${video.mega_hash}`
-                : video.video_url}
+              url={videosAPI.getStreamURL(video)}
               videoId={video.id}
               poster={video.thumbnail}
             />
@@ -267,9 +318,13 @@ const VideoDetail = () => {
         <div className="lg:col-span-1">
           <h3 className="font-bold text-white mb-4">Video liên quan</h3>
           <div className="space-y-4">
-            {relatedVideos?.slice(0, 8).map((vid) => (
-              <VideoCard key={vid.id} video={vid} />
-            ))}
+            {relatedVideos?.length > 0 ? (
+              relatedVideos.map((vid) => (
+                <VideoCard key={vid.id} video={vid} />
+              ))
+            ) : (
+              <p className="text-gray-400 text-sm">Không có video liên quan</p>
+            )}
           </div>
         </div>
       </div>

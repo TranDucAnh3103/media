@@ -70,6 +70,26 @@ export const videosAPI = {
   delete: (id) => api.delete(`/videos/${id}`),
   like: (id) => api.post(`/videos/${id}/like`),
   addComment: (id, content) => api.post(`/videos/${id}/comments`, { content }),
+  
+  // Get stream URL based on video storage provider
+  getStreamURL: (video) => {
+    if (!video) return ''
+    
+    // Use the new unified streaming endpoint for Telegram videos
+    if (video.storage_provider === 'telegram') {
+      return `${baseURL}/videos/stream/${video.id}`
+    }
+    
+    // Legacy: Mega videos
+    if (video.storage_provider === 'mega' || video.storage_type === 'mega') {
+      if (video.mega_hash) {
+        return `${baseURL}/videos/stream/mega/${video.mega_hash}`
+      }
+    }
+    
+    // Cloudinary or direct URL
+    return video.video_url || `${baseURL}/videos/stream/${video.id}`
+  },
 }
 
 // ============ COMICS API ============

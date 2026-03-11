@@ -52,3 +52,8 @@ temp/
 # Debug
 debug/
 *.pprof
+
+
+
+# Videos folder 
+videosUpload/

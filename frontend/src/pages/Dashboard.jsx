@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import {
@@ -10,6 +10,7 @@ import {
   MagnifyingGlassIcon,
   PlusIcon,
   ExclamationTriangleIcon,
+  ArrowPathIcon,
 } from '@heroicons/react/24/outline'
 import { Dialog } from '@headlessui/react'
 import toast from 'react-hot-toast'
@@ -25,17 +26,21 @@ const Dashboard = () => {
   const [editModal, setEditModal] = useState({ open: false, item: null, type: null })
 
   // Fetch user's videos
-  const { data: videosData, isLoading: loadingVideos } = useQuery({
+  const { data: videosData, isLoading: loadingVideos, refetch: refetchVideos } = useQuery({
     queryKey: ['my-videos'],
     queryFn: () => videosAPI.getMyVideos(),
     select: (res) => res.data?.videos || [],
+    staleTime: 0, // Always refetch
+    refetchOnMount: true,
   })
 
   // Fetch user's comics
-  const { data: comicsData, isLoading: loadingComics } = useQuery({
+  const { data: comicsData, isLoading: loadingComics, refetch: refetchComics } = useQuery({
     queryKey: ['my-comics'],
     queryFn: () => comicsAPI.getMyComics(),
     select: (res) => res.data?.comics || [],
+    staleTime: 0, // Always refetch
+    refetchOnMount: true,
   })
 
   // Delete video mutation
@@ -43,7 +48,8 @@ const Dashboard = () => {
     mutationFn: (id) => videosAPI.delete(id),
     onSuccess: () => {
       toast.success('Đã xóa video')
-      queryClient.invalidateQueries(['my-videos'])
+      queryClient.invalidateQueries({ queryKey: ['my-videos'] })
+      queryClient.invalidateQueries({ queryKey: ['videos'] })
       setDeleteModal({ open: false, item: null, type: null })
     },
     onError: () => toast.error('Xóa thất bại'),
@@ -54,7 +60,8 @@ const Dashboard = () => {
     mutationFn: (id) => comicsAPI.delete(id),
     onSuccess: () => {
       toast.success('Đã xóa truyện')
-      queryClient.invalidateQueries(['my-comics'])
+      queryClient.invalidateQueries({ queryKey: ['my-comics'] })
+      queryClient.invalidateQueries({ queryKey: ['comics'] })
       setDeleteModal({ open: false, item: null, type: null })
     },
     onError: () => toast.error('Xóa thất bại'),
@@ -65,7 +72,8 @@ const Dashboard = () => {
     mutationFn: ({ id, data }) => videosAPI.update(id, data),
     onSuccess: () => {
       toast.success('Đã cập nhật video')
-      queryClient.invalidateQueries(['my-videos'])
+      queryClient.invalidateQueries({ queryKey: ['my-videos'] })
+      queryClient.invalidateQueries({ queryKey: ['videos'] })
       setEditModal({ open: false, item: null, type: null })
     },
     onError: () => toast.error('Cập nhật thất bại'),
@@ -76,11 +84,19 @@ const Dashboard = () => {
     mutationFn: ({ id, data }) => comicsAPI.update(id, data),
     onSuccess: () => {
       toast.success('Đã cập nhật truyện')
-      queryClient.invalidateQueries(['my-comics'])
+      queryClient.invalidateQueries({ queryKey: ['my-comics'] })
+      queryClient.invalidateQueries({ queryKey: ['comics'] })
       setEditModal({ open: false, item: null, type: null })
     },
     onError: () => toast.error('Cập nhật thất bại'),
   })
+
+  // Handle refresh
+  const handleRefresh = () => {
+    refetchVideos()
+    refetchComics()
+    toast.success('Đã làm mới dữ liệu')
+  }
 
   // Filter items by search
   const filteredVideos = (videosData || []).filter(v => 
@@ -131,13 +147,23 @@ const Dashboard = () => {
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
           <h1 className="text-2xl md:text-3xl font-bold text-white">Quản lý nội dung</h1>
           
-          <Link
-            to="/upload"
-            className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white rounded-xl font-medium hover:shadow-lg hover:shadow-violet-500/25 transition-all"
-          >
-            <PlusIcon className="w-5 h-5" />
-            Upload mới
-          </Link>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleRefresh}
+              disabled={loadingVideos || loadingComics}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-white/10 text-white rounded-xl font-medium hover:bg-white/20 transition-all disabled:opacity-50"
+            >
+              <ArrowPathIcon className={`w-5 h-5 ${loadingVideos || loadingComics ? 'animate-spin' : ''}`} />
+              Làm mới
+            </button>
+            <Link
+              to="/upload"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white rounded-xl font-medium hover:shadow-lg hover:shadow-violet-500/25 transition-all"
+            >
+              <PlusIcon className="w-5 h-5" />
+              Upload mới
+            </Link>
+          </div>
         </div>
 
         {/* Tabs */}
@@ -440,7 +466,7 @@ const EditModal = ({ isOpen, onClose, onSave, item, type, isLoading }) => {
   const [description, setDescription] = useState('')
 
   // Reset form when item changes
-  useState(() => {
+  useEffect(() => {
     if (item) {
       setTitle(item.title || '')
       setDescription(item.description || '')

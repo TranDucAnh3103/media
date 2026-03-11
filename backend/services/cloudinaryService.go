@@ -207,6 +207,47 @@ func (s *CloudinaryService) DeleteResource(ctx context.Context, publicID string,
 	return err
 }
 
+// UploadImageFromPath - Upload ảnh từ file path (dùng cho thumbnail)
+func (s *CloudinaryService) UploadImageFromPath(ctx context.Context, filePath string, folder string) (*CloudinaryUploadResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Read file content
+	file, err := os.Open(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open file: %w", err)
+	}
+	defer file.Close()
+
+	filename := filepath.Base(filePath)
+	publicID := strings.TrimSuffix(filename, filepath.Ext(filename)) + "_" + fmt.Sprintf("%d", time.Now().Unix())
+
+	uploadParams := uploader.UploadParams{
+		Folder:       folder,
+		PublicID:     publicID,
+		ResourceType: "image",
+	}
+
+	result, err := s.client.Upload.Upload(ctx, file, uploadParams)
+	if err != nil {
+		return nil, fmt.Errorf("failed to upload image from path: %w", err)
+	}
+
+	// Debug logging
+	fmt.Printf("[Cloudinary] Upload result - PublicID: %s, URL: %s, Bytes: %d\n",
+		result.PublicID, result.SecureURL, result.Bytes)
+
+	return &CloudinaryUploadResult{
+		PublicID:  result.PublicID,
+		URL:       result.URL,
+		SecureURL: result.SecureURL,
+		Width:     result.Width,
+		Height:    result.Height,
+		Format:    result.Format,
+		Bytes:     int64(result.Bytes),
+	}, nil
+}
+
 // DeleteFolder - Xóa toàn bộ folder và resources trong đó từ Cloudinary
 // Ví dụ: folder = "comics/abc123" sẽ xóa tất cả ảnh trong folder đó
 func (s *CloudinaryService) DeleteFolder(ctx context.Context, folder string, resourceType string) error {

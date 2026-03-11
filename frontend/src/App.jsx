@@ -13,7 +13,6 @@ import Comics from './pages/Comics'
 import ComicDetail from './pages/ComicDetail'
 import ComicReader from './pages/ComicReader'
 import Upload from './pages/Upload'
-import Admin from './pages/Admin'
 import Login from './pages/Login'
 import Register from './pages/Register'
 import Profile from './pages/Profile'
@@ -56,7 +55,6 @@ function App() {
           <Route path="upload" element={<Upload />} />
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="profile" element={<Profile />} />
-          <Route path="admin" element={<Admin />} />
         </Route>
 
         {/* 404 */}

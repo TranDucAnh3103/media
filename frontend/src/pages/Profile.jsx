@@ -4,20 +4,17 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { 
   UserCircleIcon,
   BookmarkIcon,
-  ClockIcon,
   HeartIcon,
   Cog6ToothIcon,
   TrashIcon,
   PlayIcon,
   Squares2X2Icon,
-  ShieldCheckIcon,
   ArrowRightOnRectangleIcon,
-  ArrowPathIcon,
 } from '@heroicons/react/24/outline'
 import toast from 'react-hot-toast'
 import VideoCard from '../components/VideoCard'
 import ComicCard from '../components/ComicCard'
-import { userAPI, syncAPI } from '../services/api'
+import { userAPI } from '../services/api'
 import { useAuthStore } from '../store/authStore'
 
 // User profile page
@@ -67,57 +64,6 @@ const Profile = () => {
     onSuccess: () => {
       toast.success('Đã xóa lịch sử')
       queryClient.invalidateQueries(['user', 'profile'])
-    },
-  })
-
-  // Sync videos mutation (Cloudinary + Mega)
-  const syncVideosMutation = useMutation({
-    mutationFn: () => syncAPI.syncVideos(),
-    onSuccess: (res) => {
-      const { synced_videos, cloudinary_videos, mega_videos, errors } = res.data
-      if (synced_videos > 0) {
-        toast.success(`Đã đồng bộ: ${synced_videos} videos (Cloudinary: ${cloudinary_videos}, Mega: ${mega_videos})`)
-      } else {
-        toast('Không có video mới để đồng bộ', { icon: 'ℹ️' })
-      }
-      if (errors && errors.length > 0) {
-        console.warn('Sync video errors:', errors)
-        toast.error(`Có ${errors.length} lỗi khi đồng bộ video`)
-      }
-      queryClient.invalidateQueries({ queryKey: ['my-videos'] })
-      queryClient.invalidateQueries({ queryKey: ['videos'] })
-    },
-    onError: (err) => {
-      console.error('Sync video error:', err)
-      toast.error(err.response?.data?.error || 'Đồng bộ video thất bại')
-    },
-  })
-
-  // Sync comics mutation (Cloudinary)
-  const syncComicsMutation = useMutation({
-    mutationFn: () => syncAPI.syncComics(),
-    onSuccess: (res) => {
-      const { synced_comics, comic_folders, detected_folders, debug, errors } = res.data
-      console.log('Comic sync response:', res.data)
-      console.log('Debug info:', debug)
-      if (synced_comics > 0) {
-        toast.success(`Đã đồng bộ: ${synced_comics} truyện`)
-      } else {
-        toast(`Không có truyện mới (${comic_folders} folders được phát hiện)`, { icon: 'ℹ️' })
-      }
-      if (detected_folders && detected_folders.length > 0) {
-        console.log('Detected comic folders:', detected_folders)
-      }
-      if (errors && errors.length > 0) {
-        console.warn('Sync comic errors:', errors)
-        toast.error(`Có ${errors.length} lỗi khi đồng bộ truyện`)
-      }
-      queryClient.invalidateQueries({ queryKey: ['my-comics'] })
-      queryClient.invalidateQueries({ queryKey: ['comics'] })
-    },
-    onError: (err) => {
-      console.error('Sync comic error:', err)
-      toast.error(err.response?.data?.error || 'Đồng bộ truyện thất bại')
     },
   })
 
@@ -501,37 +447,6 @@ const Profile = () => {
                   />
                   Nhận thông báo khi có video mới
                 </label>
-              </div>
-            </div>
-
-            <hr className="border-gray-700" />
-
-            {/* Sync Content */}
-            <div>
-              <h3 className="text-white font-medium mb-3">Đồng bộ nội dung</h3>
-              <p className="text-gray-400 text-sm mb-3">
-                Đồng bộ nội dung từ Cloudinary/Mega vào database.
-              </p>
-              <div className="flex flex-wrap gap-3">
-                {/* Sync Videos Button */}
-                <button 
-                  onClick={() => syncVideosMutation.mutate()}
-                  disabled={syncVideosMutation.isPending || syncComicsMutation.isPending}
-                  className="flex items-center gap-2 px-4 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <ArrowPathIcon className={`w-5 h-5 ${syncVideosMutation.isPending ? 'animate-spin' : ''}`} />
-                  {syncVideosMutation.isPending ? 'Đang đồng bộ...' : 'Đồng bộ Video'}
-                </button>
-                
-                {/* Sync Comics Button */}
-                <button 
-                  onClick={() => syncComicsMutation.mutate()}
-                  disabled={syncVideosMutation.isPending || syncComicsMutation.isPending}
-                  className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <ArrowPathIcon className={`w-5 h-5 ${syncComicsMutation.isPending ? 'animate-spin' : ''}`} />
-                  {syncComicsMutation.isPending ? 'Đang đồng bộ...' : 'Đồng bộ Truyện'}
-                </button>
               </div>
             </div>
 

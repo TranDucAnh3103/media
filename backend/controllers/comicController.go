@@ -202,19 +202,16 @@ func (c *ComicController) CreateComic(ctx *fiber.Ctx) error {
 
 // GetMyComics - Lấy danh sách truyện của user hiện tại
 // GET /api/comics/my
+// Đối với app cá nhân: trả về TẤT CẢ truyện
 func (c *ComicController) GetMyComics(ctx *fiber.Ctx) error {
-	userID := ctx.Locals("userID").(string)
-	userObjID, err := primitive.ObjectIDFromHex(userID)
-	if err != nil {
-		return ctx.Status(400).JSON(fiber.Map{
-			"error": "Invalid user ID",
-		})
-	}
+	// Xác thực user (không filter theo user vì đây là app cá nhân)
+	_ = ctx.Locals("userID").(string)
 
 	dbCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	cursor, err := services.ComicsCollection.Find(dbCtx, bson.M{"uploaded_by": userObjID}, options.Find().SetSort(bson.D{{Key: "created_at", Value: -1}}))
+	// Lấy tất cả truyện (app cá nhân - không cần phân quyền)
+	cursor, err := services.ComicsCollection.Find(dbCtx, bson.M{}, options.Find().SetSort(bson.D{{Key: "created_at", Value: -1}}))
 	if err != nil {
 		return ctx.Status(500).JSON(fiber.Map{
 			"error": "Failed to fetch comics",
