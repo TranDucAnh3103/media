@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"os"
+	"sync"
 
 	"media-backend/routes"
 
@@ -13,9 +14,12 @@ import (
 	"github.com/joho/godotenv"
 )
 
-// Global WebSocket clients cho realtime notification
-var clients = make(map[*websocket.Conn]bool)
-var broadcast = make(chan string)
+// Global WebSocket clients cho realtime notification (bảo vệ bằng mutex tránh race)
+var (
+	clients   = make(map[*websocket.Conn]bool)
+	clientsMu sync.RWMutex
+	broadcast = make(chan string)
+)
 
 func main() {
 	// Load .env file
@@ -41,9 +45,13 @@ func main() {
 
 	// WebSocket endpoint cho realtime notifications
 	app.Get("/ws", websocket.New(func(c *websocket.Conn) {
+		clientsMu.Lock()
 		clients[c] = true
+		clientsMu.Unlock()
 		defer func() {
+			clientsMu.Lock()
 			delete(clients, c)
+			clientsMu.Unlock()
 			c.Close()
 		}()
 
@@ -57,12 +65,20 @@ func main() {
 
 	// Goroutine broadcast messages to all clients
 	go func() {
-		for {
-			msg := <-broadcast
+		for msg := range broadcast {
+			clientsMu.RLock()
+			clientList := make([]*websocket.Conn, 0, len(clients))
 			for client := range clients {
+				clientList = append(clientList, client)
+			}
+			clientsMu.RUnlock()
+
+			for _, client := range clientList {
 				if err := client.WriteMessage(websocket.TextMessage, []byte(msg)); err != nil {
 					client.Close()
+					clientsMu.Lock()
 					delete(clients, client)
+					clientsMu.Unlock()
 				}
 			}
 		}

@@ -2,13 +2,14 @@
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)
+![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)
 ![Go](https://img.shields.io/badge/Go-1.21+-00ADD8?logo=go&logoColor=white)
 ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)
 ![MongoDB](https://img.shields.io/badge/MongoDB-Atlas-47A248?logo=mongodb&logoColor=white)
+![Telegram](https://img.shields.io/badge/Telegram-MTProto-26A5E4?logo=telegram&logoColor=white)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 
-**Full-stack media website để quản lý Comics và Videos với tích hợp Cloud Storage**
+**Full-stack media platform với Telegram MTProto storage và HTTP Range streaming tối ưu**
 
 [Demo](#demo) • [Tính năng](#-tính-năng) • [Cài đặt](#-cài-đặt) • [API Docs](#-api-documentation)
 
@@ -20,10 +21,19 @@
 
 **MediaHub** là một ứng dụng web full-stack cho phép người dùng quản lý, xem và chia sẻ truyện tranh (comics) và video. Ứng dụng được xây dựng với kiến trúc hiện đại, tối ưu cho hiệu suất và trải nghiệm người dùng.
 
+### 🆕 What's New in v2.0
+
+- 📡 **Telegram MTProto Integration**: Upload và stream video trực tiếp từ Telegram channel
+- ⚡ **HTTP Range Streaming**: Hỗ trợ seek/skip video với range requests
+- 🔄 **Smart Sync**: Đồng bộ video từ Telegram channel với duplicate detection
+- 🛡️ **Rate Limiting & Flood Protection**: Bảo vệ khỏi Telegram API limits
+- 💾 **Unlimited Storage**: Sử dụng Telegram làm cloud storage miễn phí không giới hạn
+
 ### Điểm nổi bật
 
 - 🚀 **Hiệu suất cao**: Backend Go với Goroutines xử lý đa luồng, Frontend React với lazy loading
-- ☁️ **Cloud Storage thông minh**: Tự động chọn Cloudinary hoặc Mega.nz dựa trên loại nội dung
+- 📡 **Telegram Storage**: Upload video lên Telegram channel, stream qua MTProto API
+- ☁️ **Multi-Cloud Support**: Telegram (primary), Cloudinary (images), Mega.nz (legacy)
 - 📱 **PWA Ready**: Có thể cài đặt như ứng dụng native, hoạt động offline
 - 🎨 **UI/UX hiện đại**: Dark mode, responsive design, mobile-first
 
@@ -34,8 +44,10 @@
 ### 🎬 Quản lý Video
 
 - Upload video với nhiều định dạng (MP4, WebM, AVI, MKV)
+- **📡 Telegram Storage**: Lưu trữ video trên Telegram channel (không giới hạn dung lượng)
+- **⚡ HTTP Range Streaming**: Hỗ trợ seek/skip với byte-range requests
+- **🔄 Channel Sync**: Đồng bộ video từ Telegram channel có sẵn
 - Tự động phân loại theo độ dài (short < 5p, medium 5-10p, long > 10p)
-- Streaming video từ Cloudinary và Mega.nz
 - Resume playback - tiếp tục xem từ vị trí đã dừng
 - Like, comment, view count tracking
 
@@ -93,11 +105,22 @@
 
 ### Cloud Services
 
-| Service           | Sử dụng                              |
-| ----------------- | ------------------------------------ |
-| **Cloudinary**    | Lưu trữ ảnh + video ngắn (< 10 phút) |
-| **Mega.nz**       | Lưu trữ video dài (> 10 phút)        |
-| **MongoDB Atlas** | Database as a Service                |
+| Service           | Sử dụng                                           |
+| ----------------- | ------------------------------------------------- |
+| **Telegram**      | 📡 Primary video storage (unlimited, MTProto API) |
+| **Cloudinary**    | Lưu trữ ảnh, thumbnails, video ngắn               |
+| **Mega.nz**       | Legacy storage (backward compatibility)           |
+| **MongoDB Atlas** | Database as a Service                             |
+
+### Telegram Integration
+
+| Component            | Mô tả                                     |
+| -------------------- | ----------------------------------------- |
+| **gotd/td**          | MTProto client library cho Go             |
+| **Channel Scanner**  | Quét và đồng bộ video từ Telegram channel |
+| **HTTP Streamer**    | Stream video với Range request support    |
+| **Rate Limiter**     | Token bucket algorithm cho API protection |
+| **Flood Protection** | Backoff strategy khi gặp FloodWait errors |
 
 ---
 
@@ -130,7 +153,17 @@ MediaHub/
 │   ├── 📂 services/                # Business logic
 │   │   ├── 📄 database.go          # MongoDB connection & indexes
 │   │   ├── 📄 cloudinaryService.go # Image/video upload to Cloudinary
-│   │   └── 📄 megaService.go       # Long video upload to Mega.nz
+│   │   ├── 📄 megaService.go       # Long video upload to Mega.nz
+│   │   └── 📂 telegram/            # 📡 Telegram MTProto integration
+│   │       ├── 📄 service.go       # Main Telegram service
+│   │       ├── 📄 client.go        # MTProto client management
+│   │       ├── 📄 uploader.go      # Video upload to channel
+│   │       ├── 📄 streamer.go      # HTTP Range streaming
+│   │       ├── 📄 scanner.go       # Channel video scanner
+│   │       ├── 📄 ratelimit.go     # Token bucket rate limiter
+│   │       ├── 📄 floodwait.go     # FloodWait error handling
+│   │       ├── 📄 cache.go         # File reference cache
+│   │       └── 📄 types.go         # Shared types & structs
 │   │
 │   ├── 📂 routes/
 │   │   └── 📄 routes.go            # API route definitions
@@ -242,10 +275,19 @@ CLOUDINARY_CLOUD_NAME=your-cloud-name
 CLOUDINARY_API_KEY=123456789012345
 CLOUDINARY_API_SECRET=your-cloudinary-api-secret
 
-# Mega.nz (tùy chọn - cho video dài > 10 phút)
+# Mega.nz (legacy - backward compatibility)
 MEGA_EMAIL=your-mega-email@example.com
 MEGA_PASSWORD=your-mega-password
+
+# Telegram MTProto (v2.0 - PRIMARY STORAGE)
+TELEGRAM_API_ID=12345678
+TELEGRAM_API_HASH=your-telegram-api-hash
+TELEGRAM_PHONE=+84xxxxxxxxx
+TELEGRAM_CHANNEL_ID=-1001234567890
+TELEGRAM_SESSION_FILE=telegram_session/session.json
 ```
+
+> 💡 **Lấy Telegram API credentials**: Truy cập https://my.telegram.org → API Development tools
 
 ```bash
 # Cài đặt dependencies và chạy server
@@ -445,7 +487,67 @@ GET /api/videos?genres=action,comedy&duration_type=short&sort_by=views&order=des
 
 ---
 
-### 📚 Comic Endpoints
+### � Telegram Endpoints (v2.0)
+
+| Method   | Endpoint                       | Mô tả                             | Auth |
+| -------- | ------------------------------ | --------------------------------- | ---- |
+| `POST`   | `/telegram/sync`               | Đồng bộ video từ Telegram channel | ✅   |
+| `GET`    | `/telegram/sync/status`        | Trạng thái đồng bộ                | ✅   |
+| `GET`    | `/telegram/videos`             | Danh sách video đã sync           | ✅   |
+| `POST`   | `/telegram/videos/:id/publish` | Publish video ra hệ thống chính   | ✅   |
+| `GET`    | `/telegram/videos/:id/stream`  | Stream video với Range support    | ❌   |
+| `DELETE` | `/telegram/videos/:id`         | Xóa video khỏi danh sách sync     | ✅   |
+
+<details>
+<summary><b>POST /telegram/sync - Đồng bộ channel</b></summary>
+
+**Response (200):**
+
+```json
+{
+  "success": true,
+  "message": "Synced 5 new videos from Telegram channel",
+  "new_videos_count": 5,
+  "skipped_count": 45,
+  "total_scanned": 100,
+  "sync_duration": "2.5s"
+}
+```
+
+</details>
+
+<details>
+<summary><b>GET /telegram/videos/:id/stream - HTTP Range Streaming</b></summary>
+
+**Headers hỗ trợ:**
+
+```
+Range: bytes=0-1048575        # Request first 1MB
+Range: bytes=1048576-         # Request from 1MB to end
+```
+
+**Response Headers:**
+
+```
+HTTP/1.1 206 Partial Content
+Accept-Ranges: bytes
+Content-Range: bytes 0-1048575/52428800
+Content-Length: 1048576
+Content-Type: video/mp4
+```
+
+**Tính năng:**
+
+- ✅ Seek/skip tới bất kỳ vị trí nào trong video
+- ✅ Resume download khi mất kết nối
+- ✅ Buffering thông minh
+- ✅ Chunk size tối ưu (512KB - 2MB)
+
+</details>
+
+---
+
+### �📚 Comic Endpoints
 
 | Method   | Endpoint                           | Mô tả                 | Auth |
 | -------- | ---------------------------------- | --------------------- | ---- |
@@ -582,6 +684,39 @@ Sử dụng cho real-time notifications về tiến trình upload và các sự 
 }
 ```
 
+### Telegram Channel Videos Collection (v2.0)
+
+```javascript
+{
+  _id: ObjectId,
+  telegram_message_id: Number,    // Unique message ID trong channel
+  telegram_grouped_id: Number,    // Group ID nếu thuộc album
+  telegram_channel_id: Number,    // Channel ID nguồn
+  telegram_file_id: String,       // File ID để download
+  telegram_file_ref: String,      // File reference (có thời hạn)
+  telegram_access_hash: Number,   // Access hash cho file
+  caption: String,                // Caption từ message
+  duration: Number,               // Độ dài video (seconds)
+  file_size: Number,              // Kích thước file (bytes)
+  width: Number,                  // Video width
+  height: Number,                 // Video height
+  mime_type: String,              // "video/mp4"
+  file_name: String,              // Tên file gốc
+  telegram_message_date: Date,    // Ngày upload lên Telegram
+  synced_at: Date,                // Ngày sync vào hệ thống
+  has_spoiler: Boolean,           // Có spoiler warning không
+  supports_streaming: Boolean,    // Hỗ trợ streaming không
+  is_published: Boolean,          // Đã publish ra Videos collection chưa
+  published_video_id: ObjectId    // Link tới video đã publish
+}
+```
+
+**Indexes:**
+
+- `telegram_message_id` (unique) - Tránh duplicate khi sync
+- `synced_at` (descending) - Sort theo thời gian sync
+- `is_published` - Filter video chưa publish
+
 ### Comics Collection
 
 ```javascript
@@ -622,7 +757,105 @@ Sử dụng cho real-time notifications về tiến trình upload và các sự 
 
 ## 🔄 Upload Workflow
 
-### Video Upload
+### Video Upload (v2.0 - Telegram)
+
+```
+┌──────────────┐         ┌──────────────┐         ┌──────────────┐
+│   Frontend   │         │   Backend    │         │   Telegram   │
+└──────┬───────┘         └──────┬───────┘         └──────┬───────┘
+       │                        │                        │
+       │  POST /videos/upload   │                        │
+       │ ─────────────────────► │                        │
+       │                        │                        │
+       │     upload_id          │                        │
+       │ ◄───────────────────── │                        │
+       │                        │                        │
+       │                        │  MTProto Upload        │
+       │                        │  (chunked, resumable)  │
+       │                        │ ─────────────────────► │
+       │                        │                        │
+       │                        │  Progress callback     │
+       │                        │ ◄───────────────────── │
+       │                        │                        │
+       │  WebSocket: progress   │                        │
+       │ ◄───────────────────── │                        │
+       │                        │                        │
+       │                        │  File ID + metadata    │
+       │                        │ ◄───────────────────── │
+       │                        │                        │
+       │  WebSocket: completed  │                        │
+       │ ◄───────────────────── │                        │
+       │                        │                        │
+```
+
+### Video Streaming (v2.0 - HTTP Range)
+
+```
+┌──────────────┐         ┌──────────────┐         ┌──────────────┐
+│    Client    │         │   Backend    │         │   Telegram   │
+│  (Browser)   │         │  (Streamer)  │         │   (MTProto)  │
+└──────┬───────┘         └──────┬───────┘         └──────┬───────┘
+       │                        │                        │
+       │  GET /stream/:id       │                        │
+       │  Range: bytes=0-       │                        │
+       │ ─────────────────────► │                        │
+       │                        │                        │
+       │                        │  Calculate offset      │
+       │                        │  & chunk size          │
+       │                        │                        │
+       │                        │  messages.getDocument  │
+       │                        │  (precise_seek=true)   │
+       │                        │ ─────────────────────► │
+       │                        │                        │
+       │                        │  Partial file data     │
+       │                        │ ◄───────────────────── │
+       │                        │                        │
+       │  206 Partial Content   │                        │
+       │  Content-Range: bytes  │                        │
+       │ ◄───────────────────── │                        │
+       │                        │                        │
+       │  [User seeks to 50%]   │                        │
+       │  Range: bytes=26214400-│                        │
+       │ ─────────────────────► │                        │
+       │                        │                        │
+       │                        │  Seek to offset        │
+       │                        │ ─────────────────────► │
+       │                        │                        │
+       │  206 Partial Content   │                        │
+       │ ◄───────────────────── │                        │
+       │                        │                        │
+```
+
+### Telegram Channel Sync (v2.0)
+
+```
+┌──────────────┐         ┌──────────────┐         ┌──────────────┐
+│   Frontend   │         │   Backend    │         │   Telegram   │
+└──────┬───────┘         └──────┬───────┘         └──────┬───────┘
+       │                        │                        │
+       │  POST /telegram/sync   │                        │
+       │ ─────────────────────► │                        │
+       │                        │                        │
+       │                        │  Get last synced ID    │
+       │                        │  from MongoDB          │
+       │                        │                        │
+       │                        │  messages.getHistory   │
+       │                        │  (min_id = last_synced)│
+       │                        │ ─────────────────────► │
+       │                        │                        │
+       │                        │  New messages only     │
+       │                        │ ◄───────────────────── │
+       │                        │                        │
+       │                        │  Extract video msgs    │
+       │                        │  Check duplicates      │
+       │                        │  InsertOne new only    │
+       │                        │                        │
+       │  {new: 5, skipped: 0}  │                        │
+       │ ◄───────────────────── │                        │
+       │                        │                        │
+```
+
+### Video Upload (Legacy - Cloudinary/Mega)
 
 ```
 ┌──────────────┐         ┌──────────────┐         ┌──────────────┐
@@ -679,20 +912,21 @@ Sử dụng cho real-time notifications về tiến trình upload và các sự 
 
 ## 🎨 Frontend Pages
 
-| Route                       | Component   | Mô tả                          |
-| --------------------------- | ----------- | ------------------------------ |
-| `/`                         | Home        | Trang chủ với trending content |
-| `/videos`                   | Videos      | Danh sách video với filter     |
-| `/videos/:id`               | VideoDetail | Xem video với player           |
-| `/comics`                   | Comics      | Danh sách truyện               |
-| `/comics/:id`               | ComicDetail | Thông tin chi tiết truyện      |
-| `/comics/:id/read/:chapter` | ComicReader | Đọc chapter                    |
-| `/login`                    | Login       | Đăng nhập                      |
-| `/register`                 | Register    | Đăng ký                        |
-| `/upload`                   | Upload      | Upload content (auth)          |
-| `/dashboard`                | Dashboard   | Dashboard cá nhân (auth)       |
-| `/profile`                  | Profile     | Quản lý profile (auth)         |
-| `/admin`                    | Admin       | Admin panel (admin only)       |
+| Route                       | Component      | Mô tả                               |
+| --------------------------- | -------------- | ----------------------------------- |
+| `/`                         | Home           | Trang chủ với trending content      |
+| `/videos`                   | Videos         | Danh sách video với filter          |
+| `/videos/:id`               | VideoDetail    | Xem video với player                |
+| `/comics`                   | Comics         | Danh sách truyện                    |
+| `/comics/:id`               | ComicDetail    | Thông tin chi tiết truyện           |
+| `/comics/:id/read/:chapter` | ComicReader    | Đọc chapter                         |
+| `/login`                    | Login          | Đăng nhập                           |
+| `/register`                 | Register       | Đăng ký                             |
+| `/upload`                   | Upload         | Upload content (auth)               |
+| `/dashboard`                | Dashboard      | Dashboard cá nhân (auth)            |
+| `/profile`                  | Profile        | Quản lý profile + Telegram sync     |
+| `/telegram-videos`          | TelegramVideos | 📡 Quản lý video từ Telegram (v2.0) |
+| `/admin`                    | Admin          | Admin panel (admin only)            |
 
 ---
 
@@ -734,6 +968,14 @@ MediaHub là Progressive Web App với:
 - **Input validation**: Server-side validation
 - **File type validation**: Chỉ cho phép file types cụ thể
 - **Rate limiting**: Có thể thêm middleware
+
+### Telegram Security (v2.0)
+
+- **Session encryption**: MTProto session được mã hóa lưu local
+- **API Rate Limiting**: Token bucket với flood protection
+- **File Reference Refresh**: Tự động refresh khi hết hạn
+- **Channel Access**: Chỉ đọc từ channel được cấu hình
+- **Safe Mode**: Tự động giảm tải khi gặp lỗi liên tục
 
 ---
 
@@ -800,6 +1042,31 @@ npm run preview # Preview production build
 - Semaphore giới hạn concurrent operations
 - Efficient file streaming
 
+### Telegram Streaming (v2.0)
+
+| Optimization                | Mô tả                                             |
+| --------------------------- | ------------------------------------------------- |
+| **Adaptive Chunk Size**     | Tự động điều chỉnh 512KB - 2MB dựa trên bandwidth |
+| **Request Coalescing**      | Gộp nhiều requests nhỏ thành một                  |
+| **File Reference Cache**    | Cache file refs với LRU eviction                  |
+| **Token Bucket Rate Limit** | Giới hạn 20 req/s, burst 30                       |
+| **Exponential Backoff**     | Xử lý FloodWait errors tự động                    |
+| **Connection Pooling**      | Reuse MTProto connections                         |
+| **Precise Seek**            | Byte-level seeking với offset alignment           |
+
+### API Rate Limiting (v2.0)
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                 Token Bucket Algorithm                  │
+├─────────────────────────────────────────────────────────┤
+│  Rate: 20 tokens/second                                 │
+│  Burst: 30 tokens (buffer cho spike)                    │
+│  FloodWait: Automatic backoff + retry                   │
+│  Safe Mode: Giảm 50% rate khi gặp lỗi liên tục         │
+└─────────────────────────────────────────────────────────┘
+```
+
 ### Frontend
 
 - Lazy loading images với `OptimizedImage`
@@ -807,6 +1074,8 @@ npm run preview # Preview production build
 - Code splitting với React.lazy
 - Service Worker caching
 - Optimized bundle với Vite
+- **Video preload** với range requests (v2.0)
+- **Adaptive buffering** dựa trên network speed (v2.0)
 
 ---
 
@@ -832,9 +1101,16 @@ MIT License - xem file [LICENSE](LICENSE) để biết thêm chi tiết.
 
 ---
 
+## 📚 Tài liệu bổ sung
+
+- 📖 [TELEGRAM_MIGRATION_README.md](TELEGRAM_MIGRATION_README.md) - Chi tiết về Telegram integration
+- 📖 [syncTele.md](syncTele.md) - Hướng dẫn sync video từ Telegram channel
+
+---
+
 <div align="center">
 
-Made with ❤️ using Go + React
+**MediaHub v2.0** - Made with ❤️ using Go + React + Telegram MTProto
 
 ⭐ Star this repo if you find it useful!
 

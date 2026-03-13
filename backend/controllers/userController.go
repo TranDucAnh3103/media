@@ -5,6 +5,7 @@ import (
 	"os"
 	"time"
 
+	"media-backend/middleware"
 	"media-backend/models"
 	"media-backend/services"
 
@@ -158,7 +159,10 @@ func (c *UserController) Login(ctx *fiber.Ctx) error {
 // GetProfile - Lấy thông tin profile với bookmarks và liked content đã populated
 // GET /api/user/profile
 func (c *UserController) GetProfile(ctx *fiber.Ctx) error {
-	userID := ctx.Locals("userID").(string)
+	userID, err := middleware.RequireUserID(ctx)
+	if err != nil {
+		return err
+	}
 
 	objID, err := primitive.ObjectIDFromHex(userID)
 	if err != nil {
@@ -267,7 +271,10 @@ func (c *UserController) GetProfile(ctx *fiber.Ctx) error {
 // UpdateProfile - Cập nhật profile
 // PUT /api/user/profile
 func (c *UserController) UpdateProfile(ctx *fiber.Ctx) error {
-	userID := ctx.Locals("userID").(string)
+	userID, err := middleware.RequireUserID(ctx)
+	if err != nil {
+		return err
+	}
 
 	objID, err := primitive.ObjectIDFromHex(userID)
 	if err != nil {
@@ -317,7 +324,10 @@ func (c *UserController) UpdateProfile(ctx *fiber.Ctx) error {
 // AddBookmark - Thêm bookmark
 // POST /api/user/bookmarks
 func (c *UserController) AddBookmark(ctx *fiber.Ctx) error {
-	userID := ctx.Locals("userID").(string)
+	userID, err := middleware.RequireUserID(ctx)
+	if err != nil {
+		return err
+	}
 
 	objID, err := primitive.ObjectIDFromHex(userID)
 	if err != nil {
@@ -363,7 +373,10 @@ func (c *UserController) AddBookmark(ctx *fiber.Ctx) error {
 // RemoveBookmark - Xóa bookmark
 // DELETE /api/user/bookmarks/:contentId
 func (c *UserController) RemoveBookmark(ctx *fiber.Ctx) error {
-	userID := ctx.Locals("userID").(string)
+	userID, err := middleware.RequireUserID(ctx)
+	if err != nil {
+		return err
+	}
 	contentID := ctx.Params("contentId")
 
 	objID, err := primitive.ObjectIDFromHex(userID)
@@ -404,7 +417,10 @@ func (c *UserController) RemoveBookmark(ctx *fiber.Ctx) error {
 // DELETE /api/user/liked/:type/:contentId
 // type = "video" hoặc "comic"
 func (c *UserController) RemoveLike(ctx *fiber.Ctx) error {
-	userID := ctx.Locals("userID").(string)
+	userID, err := middleware.RequireUserID(ctx)
+	if err != nil {
+		return err
+	}
 	contentType := ctx.Params("type")
 	contentID := ctx.Params("contentId")
 
@@ -466,7 +482,10 @@ func (c *UserController) RemoveLike(ctx *fiber.Ctx) error {
 // CreatePlaylist - Tạo playlist mới
 // POST /api/user/playlists
 func (c *UserController) CreatePlaylist(ctx *fiber.Ctx) error {
-	userID := ctx.Locals("userID").(string)
+	userID, err := middleware.RequireUserID(ctx)
+	if err != nil {
+		return err
+	}
 
 	objID, err := primitive.ObjectIDFromHex(userID)
 	if err != nil {
@@ -513,7 +532,10 @@ func (c *UserController) CreatePlaylist(ctx *fiber.Ctx) error {
 // AddToPlaylist - Thêm video vào playlist
 // POST /api/user/playlists/:playlistId/videos
 func (c *UserController) AddToPlaylist(ctx *fiber.Ctx) error {
-	userID := ctx.Locals("userID").(string)
+	userID, err := middleware.RequireUserID(ctx)
+	if err != nil {
+		return err
+	}
 	playlistID := ctx.Params("playlistId")
 
 	objID, err := primitive.ObjectIDFromHex(userID)

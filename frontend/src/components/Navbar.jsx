@@ -12,6 +12,7 @@ import {
 } from '@heroicons/react/24/outline'
 import { useState } from 'react'
 import { useAuthStore } from '../store/authStore'
+import NotificationModal from './NotificationModal'
 
 // Desktop navigation links
 const navLinks = [
@@ -23,6 +24,7 @@ const navLinks = [
 const Navbar = () => {
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+  const [notifOpen, setNotifOpen] = useState(false)
   const { user, logout } = useAuthStore()
   const navigate = useNavigate()
 
@@ -48,12 +50,9 @@ const Navbar = () => {
       <nav className="relative container-custom">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
-          <Link to="/" className="flex items-center gap-2 group">
-            <div className="relative w-9 h-9">
-              <div className="absolute inset-0 bg-gradient-to-br from-violet-500 via-fuchsia-500 to-pink-500 rounded-xl rotate-6 group-hover:rotate-12 transition-transform duration-300" />
-              <div className="absolute inset-0 bg-gradient-to-br from-violet-600 to-fuchsia-600 rounded-xl flex items-center justify-center">
-                <SparklesIcon className="w-5 h-5 text-white" />
-              </div>
+          <Link to="/" className="flex items-center gap-3 group">
+            <div className="w-9 h-9 rounded-xl overflow-hidden bg-gray-800 flex items-center justify-center">
+              <img src="/favicon.png" alt="MediaHub" className="w-full h-full object-cover" />
             </div>
             <span className="text-xl font-bold bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent">
               MediaHub
@@ -82,7 +81,7 @@ const Navbar = () => {
           {/* Right side */}
           <div className="flex items-center gap-2">
             {/* Search */}
-            <div className="relative">
+            {/* <div className="relative">
               {searchOpen ? (
                 <form onSubmit={handleSearch} className="flex items-center">
                   <input
@@ -103,11 +102,15 @@ const Navbar = () => {
                   <MagnifyingGlassIcon className="w-5 h-5" />
                 </button>
               )}
-            </div>
+            </div> */}
 
             {/* Notifications */}
             {user && (
-              <button className="relative p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-full transition-all">
+              <button
+                onClick={() => setNotifOpen(true)}
+                aria-expanded={notifOpen}
+                className="relative p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-full transition-all"
+              >
                 <BellIcon className="w-5 h-5" />
                 <span className="absolute top-1 right-1 w-2 h-2 bg-fuchsia-500 rounded-full" />
               </button>
@@ -228,6 +231,7 @@ const Navbar = () => {
           </div>
         </div>
       </nav>
+      <NotificationModal open={notifOpen} onClose={() => setNotifOpen(false)} notifications={[]} />
     </header>
   )
 }

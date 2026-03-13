@@ -3,6 +3,7 @@ package telegram
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -27,12 +28,21 @@ type TelegramClient struct {
 	config      Config
 	sessionPath string
 
+	circuitBreaker *CircuitBreaker
+
 	// Persistent connection fields
 	persistentCtx    context.Context
 	persistentCancel context.CancelFunc
 	workChan         chan workRequest
 	persistentReady  chan struct{}
 	persistentErr    error
+}
+
+// SetCircuitBreaker sets the circuit breaker for this client
+func (c *TelegramClient) SetCircuitBreaker(cb *CircuitBreaker) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.circuitBreaker = cb
 }
 
 // workRequest - Request struct for persistent connection work
@@ -478,11 +488,14 @@ func (c *TelegramClient) StartPersistentConnection(parentCtx context.Context) er
 
 	// Start connection in background goroutine
 	go func() {
-		err := c.client.Run(c.persistentCtx, func(ctx context.Context) error {
-			// Setup API client
-			c.mu.Lock()
-			c.api = c.client.API()
-			c.mu.Unlock()
+		readyClosed := false
+
+		for {
+			err := c.client.Run(c.persistentCtx, func(ctx context.Context) error {
+				// Setup API client
+				c.mu.Lock()
+				c.api = c.client.API()
+				c.mu.Unlock()
 
 			// Authenticate
 			useUserAuth := c.config.PhoneNumber != ""
@@ -530,7 +543,14 @@ func (c *TelegramClient) StartPersistentConnection(parentCtx context.Context) er
 			fmt.Println("[Telegram Persistent] Connection ready, waiting for work...")
 
 			// Signal ready
-			close(c.persistentReady)
+			if !readyClosed {
+				close(c.persistentReady)
+				readyClosed = true
+			}
+
+			ticker := time.NewTicker(30 * time.Second)
+			defer ticker.Stop()
+			consecutivePingFails := 0
 
 			// Process work requests
 			for {
@@ -538,6 +558,28 @@ func (c *TelegramClient) StartPersistentConnection(parentCtx context.Context) er
 				case <-ctx.Done():
 					fmt.Println("[Telegram Persistent] Context cancelled, shutting down...")
 					return ctx.Err()
+				case <-ticker.C:
+					_, pingErr := c.api.HelpGetNearestDC(ctx)
+					if pingErr != nil {
+						log.Printf("[Heartbeat] Ping failed: %v", pingErr)
+						consecutivePingFails++
+						if consecutivePingFails >= 3 {
+							log.Printf("[Heartbeat] Ping failed 3 times consecutively. Tripping circuit breaker.")
+							c.mu.RLock()
+							cb := c.circuitBreaker
+							c.mu.RUnlock()
+							if cb != nil {
+								// Trip the circuit breaker by recording failures
+								for i := 0; i < 3; i++ {
+									cb.RecordFailure()
+								}
+							}
+							return fmt.Errorf("connection lost: ping failed 3 times")
+						}
+					} else {
+						// log.Printf("[Heartbeat] Ping OK")
+						consecutivePingFails = 0
+					}
 				case req := <-c.workChan:
 					// Execute work in connection context
 					err := req.work(ctx)
@@ -547,13 +589,33 @@ func (c *TelegramClient) StartPersistentConnection(parentCtx context.Context) er
 		})
 
 		c.mu.Lock()
-		c.persistentErr = err
 		c.connected = false
 		c.mu.Unlock()
 
 		if err != nil {
 			fmt.Printf("[Telegram Persistent] Connection error: %v\n", err)
 		}
+
+		// Check if we should exit permanently
+		select {
+		case <-c.persistentCtx.Done():
+			c.mu.Lock()
+			c.persistentErr = c.persistentCtx.Err()
+			c.mu.Unlock()
+			return
+		default:
+		}
+
+		fmt.Println("[Telegram Persistent] Waiting 30s before reconnecting...")
+		select {
+		case <-time.After(30 * time.Second):
+		case <-c.persistentCtx.Done():
+			c.mu.Lock()
+			c.persistentErr = c.persistentCtx.Err()
+			c.mu.Unlock()
+			return
+		}
+		} // <- close for loop
 	}()
 
 	// Wait for ready or timeout

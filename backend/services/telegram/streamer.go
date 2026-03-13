@@ -6,6 +6,7 @@ import (
 	"io"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/gotd/td/tg"
 )
@@ -26,14 +27,16 @@ const (
 
 // TelegramStreamer - Xử lý streaming video từ Telegram
 type TelegramStreamer struct {
-	client *TelegramClient
-	mu     sync.Mutex
+	client         *TelegramClient
+	circuitBreaker *CircuitBreaker
+	mu             sync.Mutex
 }
 
 // NewTelegramStreamer - Tạo instance streamer mới
-func NewTelegramStreamer(client *TelegramClient) *TelegramStreamer {
+func NewTelegramStreamer(client *TelegramClient, cb *CircuitBreaker) *TelegramStreamer {
 	return &TelegramStreamer{
-		client: client,
+		client:         client,
+		circuitBreaker: cb,
 	}
 }
 
@@ -100,6 +103,10 @@ func (s *TelegramStreamer) StreamVideo(ctx context.Context, req StreamRequest, w
 	if !s.client.IsConnected() {
 		return ErrNotConnected
 	}
+	
+	if s.circuitBreaker != nil && !s.circuitBreaker.AllowRequest() {
+		return fmt.Errorf("circuit breaker is OPEN, stream request blocked")
+	}
 
 	return s.client.ExecuteInConnection(ctx, func(ctx context.Context) error {
 		api := s.client.GetAPI()
@@ -150,25 +157,55 @@ func (s *TelegramStreamer) StreamVideo(ctx context.Context, req StreamRequest, w
 			if cached, found := DefaultStreamCache.Get(req.MessageID, offset, chunkEnd); found {
 				chunkData = cached
 			} else {
-				// Download từ Telegram
-				file, err := api.UploadGetFile(ctx, &tg.UploadGetFileRequest{
-					Location:     location,
-					Offset:       offset,
-					Limit:        int(chunkSize),
-					Precise:      true,
-					CDNSupported: false,
+				// Retry with exponential backoff
+				boConf := BackoffConfig{
+					BaseDelay:         500 * time.Millisecond,
+					MaxDelay:          10 * time.Second,
+					MaxRetries:        3,
+					Multiplier:        2.0,
+					JitterFactor:      0.2,
+					ResetAfterSuccess: true,
+				}
+				backoff := NewExponentialBackoff(boConf)
+				opID := fmt.Sprintf("stream_%d_offset_%d", req.MessageID, offset)
+
+				err := backoff.Execute(ctx, opID, func() error {
+					if s.circuitBreaker != nil && !s.circuitBreaker.AllowRequest() {
+						return fmt.Errorf("circuit breaker is OPEN")
+					}
+
+					// Download từ Telegram
+					file, dlErr := api.UploadGetFile(ctx, &tg.UploadGetFileRequest{
+						Location:     location,
+						Offset:       offset,
+						Limit:        int(chunkSize),
+						Precise:      true,
+						CDNSupported: false,
+					})
+
+					if dlErr != nil {
+						if s.circuitBreaker != nil {
+							s.circuitBreaker.RecordFailure()
+						}
+						// Let backoff handle retries
+						return fmt.Errorf("chunk download failed: %w", dlErr)
+					}
+
+					fileResult, ok := file.(*tg.UploadFile)
+					if !ok {
+						return ErrChunkDownloadFailed
+					}
+
+					chunkData = fileResult.Bytes
+					if s.circuitBreaker != nil {
+						s.circuitBreaker.RecordSuccess()
+					}
+					return nil
 				})
 
 				if err != nil {
-					return fmt.Errorf("failed to download chunk at offset %d: %w", offset, err)
+					return fmt.Errorf("failed to download chunk at offset %d after retries: %w", offset, err)
 				}
-
-				fileResult, ok := file.(*tg.UploadFile)
-				if !ok {
-					return ErrChunkDownloadFailed
-				}
-
-				chunkData = fileResult.Bytes
 
 				// Cache chunk
 				if len(chunkData) > 0 {

@@ -16,9 +16,10 @@ var MongoDB *mongo.Database
 
 // Collections
 var (
-	UsersCollection  *mongo.Collection
-	ComicsCollection *mongo.Collection
-	VideosCollection *mongo.Collection
+	UsersCollection                 *mongo.Collection
+	ComicsCollection                *mongo.Collection
+	VideosCollection                *mongo.Collection
+	TelegramChannelVideosCollection *mongo.Collection
 )
 
 // ConnectDB - Kết nối tới MongoDB Atlas
@@ -61,6 +62,7 @@ func ConnectDB() error {
 	UsersCollection = MongoDB.Collection("users")
 	ComicsCollection = MongoDB.Collection("comics")
 	VideosCollection = MongoDB.Collection("videos")
+	TelegramChannelVideosCollection = MongoDB.Collection("telegram_channel_videos")
 
 	// Tạo indexes
 	if err := createIndexes(ctx); err != nil {
@@ -125,6 +127,28 @@ func createIndexes(ctx context.Context) error {
 		{Keys: bson.D{{Key: "created_at", Value: -1}}},
 	}
 	if _, err := VideosCollection.Indexes().CreateMany(ctx, videoIndexes); err != nil {
+		return err
+	}
+
+	// TelegramChannelVideos indexes
+	telegramVideoIndexes := []mongo.IndexModel{
+		{
+			Keys:    bson.D{{Key: "telegram_message_id", Value: 1}},
+			Options: options.Index().SetUnique(true),
+		},
+		{Keys: bson.D{{Key: "telegram_channel_id", Value: 1}}},
+		{Keys: bson.D{{Key: "telegram_grouped_id", Value: 1}}},
+		{Keys: bson.D{{Key: "is_published", Value: 1}}},
+		{Keys: bson.D{{Key: "synced_at", Value: -1}}},
+		{Keys: bson.D{{Key: "telegram_message_date", Value: -1}}},
+		{
+			Keys: bson.D{
+				{Key: "caption", Value: "text"},
+			},
+			Options: options.Index().SetName("telegram_videos_text_search"),
+		},
+	}
+	if _, err := TelegramChannelVideosCollection.Indexes().CreateMany(ctx, telegramVideoIndexes); err != nil {
 		return err
 	}
 

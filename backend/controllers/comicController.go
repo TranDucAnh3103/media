@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"media-backend/middleware"
 	"media-backend/models"
 	"media-backend/services"
 
@@ -147,7 +148,10 @@ func (c *ComicController) GetComic(ctx *fiber.Ctx) error {
 // CreateComic - Tạo truyện mới
 // POST /api/comics
 func (c *ComicController) CreateComic(ctx *fiber.Ctx) error {
-	userID := ctx.Locals("userID").(string)
+	userID, err := middleware.RequireUserID(ctx)
+	if err != nil {
+		return err
+	}
 	userObjID, _ := primitive.ObjectIDFromHex(userID)
 
 	var req models.ComicCreateRequest
@@ -187,7 +191,7 @@ func (c *ComicController) CreateComic(ctx *fiber.Ctx) error {
 	dbCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	_, err := services.ComicsCollection.InsertOne(dbCtx, comic)
+	_, err = services.ComicsCollection.InsertOne(dbCtx, comic)
 	if err != nil {
 		return ctx.Status(500).JSON(fiber.Map{
 			"error": "Failed to create comic",
@@ -205,7 +209,7 @@ func (c *ComicController) CreateComic(ctx *fiber.Ctx) error {
 // Đối với app cá nhân: trả về TẤT CẢ truyện
 func (c *ComicController) GetMyComics(ctx *fiber.Ctx) error {
 	// Xác thực user (không filter theo user vì đây là app cá nhân)
-	_ = ctx.Locals("userID").(string)
+	_, _ = middleware.GetUserID(ctx)
 
 	dbCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -234,7 +238,10 @@ func (c *ComicController) GetMyComics(ctx *fiber.Ctx) error {
 // UploadComicWithImages - Upload truyện mới với ảnh (đơn giản hóa - không cần chapter riêng)
 // POST /api/comics/upload
 func (c *ComicController) UploadComicWithImages(ctx *fiber.Ctx) error {
-	userID := ctx.Locals("userID").(string)
+	userID, err := middleware.RequireUserID(ctx)
+	if err != nil {
+		return err
+	}
 	userObjID, _ := primitive.ObjectIDFromHex(userID)
 
 	if c.cloudinary == nil {
@@ -756,7 +763,10 @@ func (c *ComicController) GetLatest(ctx *fiber.Ctx) error {
 // POST /api/comics/:id/like
 func (c *ComicController) LikeComic(ctx *fiber.Ctx) error {
 	id := ctx.Params("id")
-	userID := ctx.Locals("userID").(string)
+	userID, err := middleware.RequireUserID(ctx)
+	if err != nil {
+		return err
+	}
 
 	objID, err := primitive.ObjectIDFromHex(id)
 	if err != nil {

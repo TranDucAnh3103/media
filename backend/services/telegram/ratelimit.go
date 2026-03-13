@@ -46,18 +46,23 @@ type RateLimiter struct {
 	globalLastRefill time.Time
 	globalMu         sync.Mutex
 
-	// Metrics
-	metrics *RateLimitMetrics
+	// Metrics (internal)
+	metrics *rateLimitMetricsInternal
 }
 
-// RateLimitMetrics - Thống kê rate limiting
+// RateLimitMetrics - Thống kê rate limiting (DTO - không chứa mutex, an toàn khi copy/return)
 type RateLimitMetrics struct {
 	TotalRequests     int64
 	ThrottledRequests int64
 	UploadRequests    int64
 	ThrottledUploads  int64
 	LastThrottleTime  time.Time
-	mu                sync.RWMutex
+}
+
+// rateLimitMetricsInternal - internal struct với mutex
+type rateLimitMetricsInternal struct {
+	RateLimitMetrics
+	mu sync.RWMutex
 }
 
 // NewRateLimiter - Tạo rate limiter mới
@@ -68,7 +73,7 @@ func NewRateLimiter(config RateLimitConfig) *RateLimiter {
 		userLastMessage:  make(map[string]time.Time),
 		globalTokens:     float64(config.MaxGlobalRequestsPerSecond),
 		globalLastRefill: time.Now(),
-		metrics:          &RateLimitMetrics{},
+		metrics:          &rateLimitMetricsInternal{},
 	}
 }
 
@@ -221,11 +226,11 @@ func (r *RateLimiter) recordThrottle() {
 	r.metrics.LastThrottleTime = time.Now()
 }
 
-// GetMetrics - Lấy metrics hiện tại
+// GetMetrics - Lấy metrics hiện tại (trả về DTO không chứa mutex, an toàn)
 func (r *RateLimiter) GetMetrics() RateLimitMetrics {
 	r.metrics.mu.RLock()
 	defer r.metrics.mu.RUnlock()
-	return *r.metrics
+	return r.metrics.RateLimitMetrics
 }
 
 // GetCurrentUploadCount - Lấy số upload hiện tại trong window

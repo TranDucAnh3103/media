@@ -25,6 +25,8 @@ const ImageGallery = ({
   const [showControls, setShowControls] = useState(true)
   const [showSettings, setShowSettings] = useState(false)
   const [imageLoaded, setImageLoaded] = useState({})
+  const settingsPanelRef = useRef(null)
+  const [settingsStyle, setSettingsStyle] = useState({})
 
   const { 
     readerSettings, 
@@ -171,6 +173,37 @@ const ImageGallery = ({
     }
   }
 
+  // Open settings anchored to clicked button
+  const handleOpenSettings = (e) => {
+    e.stopPropagation()
+    const btn = e.currentTarget
+    if (!btn) {
+      setShowSettings(true)
+      return
+    }
+    const rect = btn.getBoundingClientRect()
+    const top = rect.bottom + window.scrollY + 8
+    const left = Math.max(8, rect.left + window.scrollX)
+    setSettingsStyle({ position: 'absolute', top: `${top}px`, left: `${left}px`, minWidth: '200px' })
+    setShowSettings(true)
+  }
+
+  // Close settings when clicking outside
+  useEffect(() => {
+    if (!showSettings) return
+    const onDocClick = (evt) => {
+      if (settingsPanelRef.current && !settingsPanelRef.current.contains(evt.target)) {
+        setShowSettings(false)
+      }
+    }
+    document.addEventListener('mousedown', onDocClick)
+    document.addEventListener('touchstart', onDocClick)
+    return () => {
+      document.removeEventListener('mousedown', onDocClick)
+      document.removeEventListener('touchstart', onDocClick)
+    }
+  }, [showSettings])
+
   // Fit mode classes
   const getFitClass = () => {
     switch (fitMode) {
@@ -190,12 +223,12 @@ const ImageGallery = ({
     return (
       <div 
         ref={containerRef}
-        className="relative bg-gray-900"
+        className="relative bg-gray-900 read-scroll"
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
       >
         {/* Controls bar */}
-        <div className={`sticky top-16 z-10 bg-gray-900/95 backdrop-blur-sm p-2 flex items-center justify-between transition-opacity ${showControls ? 'opacity-100' : 'opacity-0'}`}>
+        <div className={`sticky top-0 z-10 bg-gray-900/95 backdrop-blur-sm p-2 flex items-center justify-between transition-opacity ${showControls ? 'opacity-100' : 'opacity-0'}`}>
           <div className="flex items-center space-x-2">
             <span className="text-white text-sm">
               Trang {currentPage} / {images.length}
@@ -204,8 +237,9 @@ const ImageGallery = ({
           
           <div className="flex items-center space-x-2">
             <button 
-              onClick={() => setShowSettings(!showSettings)}
+              onClick={(e) => handleOpenSettings(e)}
               className="p-2 text-gray-400 hover:text-white rounded-lg hover:bg-gray-800"
+              aria-expanded={showSettings}
             >
               <Cog6ToothIcon className="w-5 h-5" />
             </button>
@@ -224,10 +258,14 @@ const ImageGallery = ({
 
         {/* Settings panel */}
         {showSettings && (
-          <div className="sticky top-28 z-10 mx-auto max-w-xs bg-gray-800 rounded-lg shadow-lg p-4 mb-4">
-            <h4 className="text-white font-medium mb-3">Cài đặt đọc</h4>
-            
-            <div className="space-y-3">
+          <div
+            ref={settingsPanelRef}
+            className=" settings-panel absolute z-10 bg-gray-800 rounded-lg shadow-2xl p-3"
+            style={settingsStyle}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h4 className="text-white font-medium mb-2">Cài đặt đọc</h4>
+            <div className="space-y-3 text-sm">
               <div>
                 <label className="text-sm text-gray-400">Chế độ</label>
                 <div className="flex space-x-2 mt-1">
@@ -245,7 +283,7 @@ const ImageGallery = ({
                   </button>
                 </div>
               </div>
-              
+
               <div>
                 <label className="text-sm text-gray-400">Fit ảnh</label>
                 <div className="flex space-x-2 mt-1">
@@ -302,7 +340,7 @@ const ImageGallery = ({
   return (
     <div 
       ref={containerRef}
-      className="relative bg-gray-900 min-h-[80vh] select-none"
+      className="relative bg-gray-900 min-h-[80vh] select-none read-scroll"
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
       onClick={() => setShowControls(!showControls)}

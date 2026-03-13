@@ -12,9 +12,13 @@ import {
   ArrowRightOnRectangleIcon,
   FilmIcon,
   BookOpenIcon,
+  ArrowPathIcon,
+  CloudArrowDownIcon,
+  CheckCircleIcon,
+  ExclamationCircleIcon,
 } from '@heroicons/react/24/outline'
 import toast from 'react-hot-toast'
-import { userAPI } from '../services/api'
+import { userAPI, telegramAPI } from '../services/api'
 import { useAuthStore } from '../store/authStore'
 
 // Helper function to format duration
@@ -87,6 +91,28 @@ const Profile = () => {
     onSuccess: () => {
       toast.success('Đã xóa lịch sử')
       queryClient.invalidateQueries({ queryKey: ['user', 'profile'] })
+    },
+  })
+
+  // Telegram status query
+  const { data: telegramStatus, refetch: refetchTelegramStatus } = useQuery({
+    queryKey: ['telegram', 'status'],
+    queryFn: () => telegramAPI.getStatus(),
+    select: (res) => res.data,
+    refetchInterval: 30000, // Refetch every 30 seconds
+  })
+
+  // Telegram sync mutation
+  const syncTelegramMutation = useMutation({
+    mutationFn: (params) => telegramAPI.syncChannel(params),
+    onSuccess: (res) => {
+      const data = res.data
+      toast.success(`Đồng bộ thành công! Tìm thấy ${data.new_videos_count} video mới`)
+      queryClient.invalidateQueries({ queryKey: ['telegram'] })
+    },
+    onError: (err) => {
+      const message = err.response?.data?.error || 'Đồng bộ thất bại'
+      toast.error(message)
     },
   })
 
@@ -206,12 +232,12 @@ const Profile = () => {
               </p>
               <p className="text-sm text-gray-400">Playlists</p>
             </div>
-            <div>
+            {/* <div>
               <p className="text-2xl font-bold text-white">
-                {profile?.watch_history?.length || 0}
+                {profile?.watch_history?.length || 999}
               </p>
               <p className="text-sm text-gray-400">Đã xem</p>
-            </div>
+            </div> */}
           </div>
         </div>
       </div>
@@ -517,6 +543,81 @@ const Profile = () => {
           <h2 className="text-xl font-bold text-white mb-4">Cài đặt tài khoản</h2>
           
           <div className="bg-gray-800 rounded-lg p-6 space-y-6">
+            {/* Telegram Sync Section */}
+            <div>
+              <h3 className="text-white font-medium mb-3 flex items-center gap-2">
+                <CloudArrowDownIcon className="w-5 h-5 text-blue-400" />
+                Đồng bộ Telegram
+              </h3>
+              <p className="text-sm text-gray-400 mb-4">
+                Quét và tự động thêm video từ kênh Telegram vào thư viện. Video sẽ xuất hiện ngay trong trang Videos.
+              </p>
+              
+              {/* Telegram Status */}
+              <div className="bg-gray-700/50 rounded-lg p-4 mb-4">
+                <div className="flex items-center gap-3 mb-2">
+                  {telegramStatus?.telegram_connected ? (
+                    <CheckCircleIcon className="w-5 h-5 text-green-400" />
+                  ) : (
+                    <ExclamationCircleIcon className="w-5 h-5 text-yellow-400" />
+                  )}
+                  <span className="text-sm text-gray-300">
+                    {telegramStatus?.message || 'Đang kiểm tra kết nối...'}
+                  </span>
+                </div>
+                <div className="text-xs text-gray-500">
+                  Trạng thái: {telegramStatus?.telegram_connected ? (
+                    <span className="text-green-400">Đã kết nối</span>
+                  ) : (
+                    <span className="text-yellow-400">Chưa kết nối</span>
+                  )}
+                </div>
+              </div>
+              
+              {/* Sync Button */}
+              <div className="flex gap-3">
+                <button
+                  onClick={() => syncTelegramMutation.mutate({})}
+                  disabled={syncTelegramMutation.isPending || !telegramStatus?.telegram_connected}
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium transition-colors ${
+                    syncTelegramMutation.isPending || !telegramStatus?.telegram_connected
+                      ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                      : 'bg-blue-600 text-white hover:bg-blue-500'
+                  }`}
+                >
+                  <ArrowPathIcon className={`w-5 h-5 ${syncTelegramMutation.isPending ? 'animate-spin' : ''}`} />
+                  {syncTelegramMutation.isPending ? 'Đang đồng bộ...' : 'Đồng bộ ngay'}
+                </button>
+                <button
+                  onClick={() => refetchTelegramStatus()}
+                  className="px-4 py-2.5 rounded-lg bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors"
+                >
+                  Kiểm tra kết nối
+                </button>
+              </div>
+              
+              {/* Sync Result */}
+              {syncTelegramMutation.isSuccess && (
+                <div className="mt-4 p-3 bg-green-500/20 border border-green-500/30 rounded-lg">
+                  <p className="text-sm text-green-300">
+                    ✓ Đồng bộ thành công! Đã thêm {syncTelegramMutation.data?.data?.new_videos_count || 0} video mới vào thư viện.
+                  </p>
+                  {syncTelegramMutation.data?.data?.skipped_count > 0 && (
+                    <p className="text-xs text-gray-400 mt-1">
+                      Bỏ qua: {syncTelegramMutation.data?.data?.skipped_count} video đã có
+                    </p>
+                  )}
+                  <p className="text-xs text-green-400 mt-1">
+                    Thời gian: {syncTelegramMutation.data?.data?.sync_duration || '0s'}
+                  </p>
+                </div>
+              )}
+              
+              
+            </div>
+
+            <hr className="border-gray-700" />
+
             {/* Change Password */}
             <div>
               <h3 className="text-white font-medium mb-3">Đổi mật khẩu</h3>

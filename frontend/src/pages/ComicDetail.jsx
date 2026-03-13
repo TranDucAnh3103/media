@@ -39,7 +39,7 @@ const ComicDetail = () => {
   // Fetch related comics
   const { data: relatedComics } = useQuery({
     queryKey: ['comics', 'related', comic?.genres?.[0]],
-    queryFn: () => comicsAPI.getAll({ genres: comic?.genres?.[0], limit: 6 }),
+    queryFn: () => comicsAPI.getAll({ genres: comic?.genres?.[0], limit: 30 }),
     select: (res) => res.data.comics?.filter(c => c.id !== id),
     enabled: !!comic?.genres?.length,
   })
@@ -59,6 +59,9 @@ const ComicDetail = () => {
 
   // Get saved reading progress
   const savedProgress = getComicProgress(id)
+
+  // Related comics tab state
+  const [relatedTab, setRelatedTab] = useState('same')
 
   // Lấy tất cả ảnh từ các chapters (memoized, safe for null comic)
   const allImages = useMemo(() => {
@@ -164,7 +167,7 @@ const ComicDetail = () => {
           )}
 
           {/* Stats */}
-          <div className="flex flex-wrap items-center gap-4 text-gray-400 mb-4">
+          {/* <div className="flex flex-wrap items-center gap-4 text-gray-400 mb-4">
             <span className="flex items-center gap-1">
               <EyeIcon className="w-5 h-5" />
               {formatViews(comic.views)} lượt xem
@@ -179,14 +182,15 @@ const ComicDetail = () => {
                 {comic.rating.toFixed(1)}
               </span>
             )}
-          </div>
+          </div> */}
 
           {/* Status */}
           <div className="mb-4">
             <span className={`inline-block px-3 py-1 rounded-full text-sm ${
               comic.status === 'completed' ? 'bg-green-500/20 text-green-400' : 'bg-blue-500/20 text-blue-400'
             }`}>
-              {comic.status === 'completed' ? 'Hoàn thành' : 'Đang cập nhật'}
+              {/* {comic.status === 'completed' ? 'Hoàn thành' : 'Đang cập nhật'} */}
+              <p>Hoàn thành</p>
             </span>
           </div>
 
@@ -305,15 +309,24 @@ const ComicDetail = () => {
         )}
       </div>
 
-      {/* Related Comics */}
+      {/* Related Comics - tabbed horizontal lists */}
       {relatedComics?.length > 0 && (
-        <div>
+        <div className="mt-6">
           <h2 className="text-xl font-bold text-white mb-4">Truyện liên quan</h2>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-            {relatedComics.slice(0, 6).map((c) => (
-              <ComicCard key={c.id} comic={c} />
-            ))}
+
+          {/* Tabs */}
+          <div className="flex items-center space-x-2 mb-3">
+            <TabButton label="Cùng tên" tabKey="same" activeTab={relatedTab} onSelect={setRelatedTab} />
+            <TabButton label="Xem nhiều" tabKey="views" activeTab={relatedTab} onSelect={setRelatedTab} />
+            <TabButton label="Mới đăng" tabKey="latest" activeTab={relatedTab} onSelect={setRelatedTab} />
           </div>
+
+          <RelatedList
+            comics={relatedComics}
+            currentId={id}
+            currentTitle={comic.title}
+            tab={relatedTab}
+          />
         </div>
       )}
     </div>
@@ -322,3 +335,45 @@ const ComicDetail = () => {
 }
 
 export default ComicDetail
+
+// Small TabButton component
+function TabButton({ label, tabKey, activeTab, onSelect }) {
+  const active = activeTab === tabKey
+
+  return (
+    <button
+      onClick={() => onSelect(tabKey)}
+      className={`px-3 py-1 rounded-full text-sm ${active ? 'bg-primary-600 text-white' : 'bg-white/5 text-gray-300'}`}
+    >
+      {label}
+    </button>
+  )
+}
+
+// RelatedList: renders horizontal lists for the selected tab
+function RelatedList({ comics = [], currentId, currentTitle, tab = 'same' }) {
+  const sameTitle = comics.filter(c => c.title === currentTitle && c.id !== currentId)
+  const mostViewed = [...comics].sort((a, b) => (b.views || 0) - (a.views || 0))
+  const latest = [...comics].sort((a, b) => {
+    const da = new Date(a.created_at || a.createdAt || a.published_at || a.publishedAt || 0)
+    const db = new Date(b.created_at || b.createdAt || b.published_at || b.publishedAt || 0)
+    return db - da
+  })
+
+  let list = []
+  if (tab === 'same') list = sameTitle.length ? sameTitle : latest
+  if (tab === 'views') list = mostViewed
+  if (tab === 'latest') list = latest
+
+  return (
+    <div className="-mx-4 px-4">
+      <div className="flex space-x-3 overflow-x-auto snap-x snap-mandatory py-2 scrollbar-thumb-rounded scrollbar-thin">
+        {list.map((c) => (
+          <div key={c.id} className="w-44 flex-none snap-start">
+            <ComicCard comic={c} />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}

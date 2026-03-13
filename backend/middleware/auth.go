@@ -119,6 +119,26 @@ func OptionalAuthMiddleware() fiber.Handler {
 	}
 }
 
+// GetUserID - Lấy userID từ Locals an toàn (tránh panic khi type assertion)
+// Trả về (userID, true) nếu có và hợp lệ; ("", false) nếu không
+func GetUserID(c *fiber.Ctx) (string, bool) {
+	v := c.Locals("userID")
+	if v == nil {
+		return "", false
+	}
+	id, ok := v.(string)
+	return id, ok && id != ""
+}
+
+// RequireUserID - Lấy userID, trả 401 nếu không có
+func RequireUserID(c *fiber.Ctx) (string, error) {
+	id, ok := GetUserID(c)
+	if !ok {
+		return "", c.Status(401).JSON(fiber.Map{"error": "Unauthorized"})
+	}
+	return id, nil
+}
+
 // RateLimitMiddleware - Middleware giới hạn request rate
 // TODO: Implement proper rate limiting with Redis
 func RateLimitMiddleware(maxRequests int, windowSeconds int) fiber.Handler {

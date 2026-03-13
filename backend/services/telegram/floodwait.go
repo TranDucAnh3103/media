@@ -43,8 +43,8 @@ type FloodWaitHandler struct {
 	eventMu   sync.RWMutex
 	maxEvents int
 
-	// Stats
-	stats FloodWaitStats
+	// Stats (internal, protected by stats.mu)
+	stats floodWaitStatsInternal
 }
 
 // FloodWaitEvent - Sự kiện FloodWait
@@ -58,7 +58,7 @@ type FloodWaitEvent struct {
 	Resumed      bool
 }
 
-// FloodWaitStats - Thống kê FloodWait
+// FloodWaitStats - Thống kê FloodWait (DTO - không chứa mutex, an toàn khi copy/return)
 type FloodWaitStats struct {
 	TotalFloodWaits   int64
 	TotalWaitTime     time.Duration
@@ -66,7 +66,12 @@ type FloodWaitStats struct {
 	LastFloodWait     time.Time
 	FloodWaitsLast1h  int
 	FloodWaitsLast24h int
-	mu                sync.RWMutex
+}
+
+// floodWaitStatsInternal - internal struct với mutex, chỉ dùng trong FloodWaitHandler
+type floodWaitStatsInternal struct {
+	FloodWaitStats
+	mu sync.RWMutex
 }
 
 // NewFloodWaitHandler - Tạo handler mới
@@ -254,17 +259,14 @@ func (h *FloodWaitHandler) updateStats(waitDuration time.Duration) {
 	}
 }
 
-// GetStats - Lấy thống kê
+// GetStats - Lấy thống kê (trả về DTO không chứa mutex, an toàn)
 func (h *FloodWaitHandler) GetStats() FloodWaitStats {
 	h.stats.mu.RLock()
-	defer h.stats.mu.RUnlock()
-
-	stats := h.stats
+	stats := h.stats.FloodWaitStats // copy data only, no mutex
+	h.stats.mu.RUnlock()
 
 	// Calculate flood waits in time windows
 	h.eventMu.RLock()
-	defer h.eventMu.RUnlock()
-
 	now := time.Now()
 	oneHourAgo := now.Add(-time.Hour)
 	oneDayAgo := now.Add(-24 * time.Hour)
@@ -277,6 +279,7 @@ func (h *FloodWaitHandler) GetStats() FloodWaitStats {
 			stats.FloodWaitsLast24h++
 		}
 	}
+	h.eventMu.RUnlock()
 
 	return stats
 }

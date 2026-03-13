@@ -18,11 +18,11 @@ const MobileHeader = ({ title, showTitle = true, transparent = false }) => {
   }
 
   return (
-    <header 
+    <header
       className={`
         fixed top-0 left-0 right-0 z-50 md:hidden
-        ${transparent 
-          ? 'bg-gradient-to-b from-black/80 to-transparent' 
+        ${transparent
+          ? 'bg-gradient-to-b from-black/80 to-transparent'
           : 'bg-gray-950/95 backdrop-blur-xl border-b border-white/5'
         }
       `}
@@ -37,12 +37,19 @@ const MobileHeader = ({ title, showTitle = true, transparent = false }) => {
           <ArrowLeftIcon className="w-6 h-6 text-white" />
         </button>
 
-        {/* Title */}
-        {showTitle && title && (
-          <h1 className="flex-1 text-lg font-semibold text-white truncate">
-            {title}
-          </h1>
-        )}
+        {/* Logo + Title */}
+        <div className="flex-1 flex items-center gap-3 truncate">
+          <div className="w-8 h-8 rounded-lg overflow-hidden bg-gray-800 flex-shrink-0">
+            <img src="/favicon.png" alt="MediaHub" className="w-full h-full object-cover" />
+          </div>
+          {showTitle && title ? (
+            <h1 className="text-lg font-semibold text-white truncate">
+              {title}
+            </h1>
+          ) : (
+            <span className="text-lg font-semibold text-white truncate">MediaHub</span>
+          )}
+        </div>
       </div>
     </header>
   )

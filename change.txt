@@ -1,0 +1,3 @@
+- ở UI mobile, truyện hiển thị trước video, và video phải được kéo sang phải để hiển thị thêm thay vì dọc xuống. mỗi lần hiển thị được 1 video, kéo sang phải để xem thêm
+- thêm animation khi chuyển trang, nhẹ nhàng và không làm giật lang. thêm scroll to tob khi chuyển bất kì tap nào để cải thiện UX
+- điều chỉnh lại logic việc undo web url khi ấn nút back trong UI mobile, nếu tôi đọc truyện và undo, nó ra trang truyện/id, sau đó undo tiếp lại ra trang đọc truyện -> lỗi logic, hãy suy nghĩ thông minh hơn là nếu ở trang comics/id rồi thì undo (quay về trang trước) thì phải thoát trang truyện/id đó và cũng không phải trang đọc truyện mà là trang comics thôi.

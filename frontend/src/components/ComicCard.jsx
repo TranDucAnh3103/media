@@ -35,10 +35,10 @@ const ComicCard = ({ comic, showChapters = true }) => {
   }
 
   return (
-    <Link to={`/comics/${comic.id}`} className="group">
-      <div className="card-hover">
+    <Link to={`/comics/${comic.id}`} className="group block h-full">
+      <div className="card-hover flex flex-col h-full">
         {/* Cover image */}
-        <div className="relative aspect-poster overflow-hidden">
+        <div className="relative aspect-poster overflow-hidden flex-none">
           <img
             src={comic.cover_image || '/placeholder-comic.png'}
             alt={comic.title}
@@ -58,20 +58,21 @@ const ComicCard = ({ comic, showChapters = true }) => {
 
           {/* Status badge */}
           <div className={`absolute top-2 left-2 px-2 py-0.5 ${getStatusColor(comic.status)} text-white text-xs font-medium rounded`}>
-            {getStatusText(comic.status)}
+            {/* {getStatusText(comic.status)} */}
+            <p>Hoàn thành</p>
           </div>
 
           {/* Chapters count */}
-          {showChapters && comic.chapters && comic.chapters.length > 0 && (
+          {/* {showChapters && comic.chapters && comic.chapters.length > 0 && (
             <div className="absolute top-2 right-2 px-2 py-0.5 bg-black/80 text-white text-xs font-medium rounded">
               {comic.chapters.length} chương
             </div>
-          )}
+          )} */}
         </div>
 
         {/* Info */}
-        <div className="p-3">
-          <h3 className="text-white font-medium line-clamp-2 group-hover:text-primary-400 transition-colors">
+        <div className="p-3 flex-1 flex flex-col">
+          <h3 className="text-white font-medium truncate whitespace-nowrap group-hover:text-primary-400 transition-colors">
             {comic.title}
           </h3>
           

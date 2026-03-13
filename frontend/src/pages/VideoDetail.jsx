@@ -1,6 +1,6 @@
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { HandThumbUpIcon, BookmarkIcon, ShareIcon, EyeIcon } from '@heroicons/react/24/outline'
+import { HandThumbUpIcon, BookmarkIcon, ShareIcon, EyeIcon, PencilIcon, PhotoIcon } from '@heroicons/react/24/outline'
 import { HandThumbUpIcon as HandThumbUpSolidIcon } from '@heroicons/react/24/solid'
 import { useState, useMemo } from 'react'
 import toast from 'react-hot-toast'
@@ -45,6 +45,8 @@ const VideoDetail = () => {
   const queryClient = useQueryClient()
   const [comment, setComment] = useState('')
   const [liked, setLiked] = useState(false)
+  const [isEditingThumb, setIsEditingThumb] = useState(false)
+  const [thumbnailUrl, setThumbnailUrl] = useState('')
 
   // Fetch video detail
   const { data: video, isLoading } = useQuery({
@@ -118,6 +120,30 @@ const VideoDetail = () => {
     },
   })
 
+  // Update thumbnail mutation
+  const updateThumbnailMutation = useMutation({
+    mutationFn: (thumbnail) => videosAPI.update(id, { thumbnail }),
+    onSuccess: () => {
+      setIsEditingThumb(false)
+      setThumbnailUrl('')
+      queryClient.invalidateQueries(['video', id])
+      queryClient.invalidateQueries(['videos'])
+      toast.success('Đã cập nhật thumbnail')
+    },
+    onError: () => {
+      toast.error('Không thể cập nhật thumbnail')
+    },
+  })
+
+  // Handle save thumbnail
+  const handleSaveThumbnail = () => {
+    if (!thumbnailUrl.trim()) {
+      toast.error('Vui lòng nhập URL hình ảnh')
+      return
+    }
+    updateThumbnailMutation.mutate(thumbnailUrl.trim())
+  }
+
   // Handle comment submit
   const handleComment = (e) => {
     e.preventDefault()
@@ -189,6 +215,59 @@ const VideoDetail = () => {
           {/* Video info */}
           <div className="mb-6">
             <h1 className="text-2xl font-bold text-white mb-2">{video.title}</h1>
+            
+            {/* Thumbnail missing notice - only show for owner or admin */}
+            {user && !video.thumbnail && (
+              <div className="mb-4 p-3 bg-yellow-900/30 border border-yellow-700/50 rounded-lg">
+                {isEditingThumb ? (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-yellow-400 text-sm mb-2">
+                      <PhotoIcon className="w-5 h-5" />
+                      <span>Thêm thumbnail cho video</span>
+                    </div>
+                    <input
+                      type="url"
+                      value={thumbnailUrl}
+                      onChange={(e) => setThumbnailUrl(e.target.value)}
+                      placeholder="Nhập URL hình ảnh (https://...)"
+                      className="input w-full text-sm"
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleSaveThumbnail}
+                        disabled={updateThumbnailMutation.isLoading}
+                        className="btn-primary text-sm py-1.5"
+                      >
+                        {updateThumbnailMutation.isLoading ? 'Đang lưu...' : 'Lưu'}
+                      </button>
+                      <button
+                        onClick={() => {
+                          setIsEditingThumb(false)
+                          setThumbnailUrl('')
+                        }}
+                        className="btn-secondary text-sm py-1.5"
+                      >
+                        Hủy
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-yellow-400 text-sm">
+                      <PhotoIcon className="w-5 h-5" />
+                      <span>Video chưa có thumbnail</span>
+                    </div>
+                    <button
+                      onClick={() => setIsEditingThumb(true)}
+                      className="flex items-center gap-1 text-yellow-400 hover:text-yellow-300 text-sm"
+                    >
+                      <PencilIcon className="w-4 h-4" />
+                      <span>Thêm</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
             
             <div className="flex flex-wrap items-center gap-4 text-gray-400 text-sm mb-4">
               <span className="flex items-center gap-1">

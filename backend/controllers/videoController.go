@@ -7,26 +7,78 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
 
+	"media-backend/middleware"
 	"media-backend/models"
 	"media-backend/services"
 	"media-backend/services/telegram"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/gotd/td/tg"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
+// telegramSyncState - Shared state for async sync (thread-safe)
+type telegramSyncState struct {
+	mu              sync.RWMutex
+	IsRunning       bool
+	SyncID          string
+	CurrentProgress int
+	Total           int
+	NewCount        int
+	LastError       string
+	StartedAt       time.Time
+}
+
+func (s *telegramSyncState) get() (running bool, id string, progress, total, newCount int, lastErr string) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.IsRunning, s.SyncID, s.CurrentProgress, s.Total, s.NewCount, s.LastError
+}
+
+func (s *telegramSyncState) setRunning(id string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.IsRunning = true
+	s.SyncID = id
+	s.CurrentProgress = 0
+	s.Total = 0
+	s.NewCount = 0
+	s.LastError = ""
+	s.StartedAt = time.Now()
+}
+
+func (s *telegramSyncState) setProgress(progress, total, newCount int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.CurrentProgress = progress
+	s.Total = total
+	s.NewCount = newCount
+}
+
+func (s *telegramSyncState) setDone(lastErr string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.IsRunning = false
+	if lastErr != "" {
+		s.LastError = lastErr
+	}
+}
+
 // VideoController - Controller xử lý video operations
 type VideoController struct {
-	cloudinary *services.CloudinaryService
-	mega       *services.MegaService     // Legacy - giữ lại cho backward compatibility
-	telegram   *telegram.TelegramService // New - Telegram storage
-	uploading  sync.Map                  // Track upload progress
+	cloudinary      *services.CloudinaryService
+	mega            *services.MegaService     // Legacy - giữ lại cho backward compatibility
+	telegram        *telegram.TelegramService // New - Telegram storage
+	uploading       sync.Map                  // Track upload progress
+	telegramSync    telegramSyncState         // Async sync state
 }
 
 // NewVideoController - Tạo instance mới
@@ -35,7 +87,7 @@ func NewVideoController() *VideoController {
 	mega, _ := services.NewMegaService() // Legacy
 
 	// Initialize Telegram service
-	tg, err := telegram.NewTelegramService()
+	tgSvc, err := telegram.NewTelegramService()
 	if err != nil {
 		fmt.Printf("Warning: Failed to initialize Telegram service: %v\n", err)
 	}
@@ -43,7 +95,7 @@ func NewVideoController() *VideoController {
 	return &VideoController{
 		cloudinary: cloudinary,
 		mega:       mega,
-		telegram:   tg,
+		telegram:   tgSvc,
 	}
 }
 
@@ -273,6 +325,130 @@ func (c *VideoController) StreamVideo(ctx *fiber.Ctx) error {
 	}
 }
 
+// GetVideoThumbnail - Lấy thumbnail; nếu chưa có (video Telegram) thì tạo từ frame đầu rồi redirect
+// GET /api/videos/:id/thumbnail
+func (c *VideoController) GetVideoThumbnail(ctx *fiber.Ctx) error {
+	id := ctx.Params("id")
+	objID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		return ctx.Status(400).JSON(fiber.Map{"error": "Invalid video ID"})
+	}
+
+	dbCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	var video models.Video
+	err = services.VideosCollection.FindOne(dbCtx, bson.M{"_id": objID}).Decode(&video)
+	if err != nil {
+		return ctx.Status(404).JSON(fiber.Map{"error": "Video not found"})
+	}
+
+	// Đã có thumbnail → redirect ngay
+	if video.Thumbnail != "" {
+		return ctx.Redirect(video.Thumbnail, 302)
+	}
+
+	// Chỉ tạo thumbnail cho video Telegram
+	if video.StorageProvider != models.StorageProviderTelegram {
+		return ctx.Status(404).JSON(fiber.Map{"error": "Thumbnail not available"})
+	}
+
+	if c.telegram == nil || c.cloudinary == nil {
+		return ctx.Status(500).JSON(fiber.Map{"error": "Service not available for thumbnail generation"})
+	}
+
+	if !c.telegram.IsConnected() {
+		if startErr := c.telegram.StartPersistentConnection(context.Background()); startErr != nil {
+			return ctx.Status(503).JSON(fiber.Map{"error": "Telegram not connected"})
+		}
+		if !c.telegram.IsConnected() {
+			return ctx.Status(503).JSON(fiber.Map{"error": "Telegram connection failed"})
+		}
+	}
+
+	// Tạo thumbnail: tải chunk đầu → extract frame → upload Cloudinary → cập nhật DB
+	thumbnailURL, genErr := c.generateTelegramVideoThumbnail(ctx.UserContext(), &video)
+	if genErr != nil {
+		fmt.Printf("[Thumbnail] Failed to generate for video %s: %v\n", id, genErr)
+		return ctx.Status(500).JSON(fiber.Map{"error": "Failed to generate thumbnail: " + genErr.Error()})
+	}
+
+	return ctx.Redirect(thumbnailURL, 302)
+}
+
+// generateTelegramVideoThumbnail - Tải chunk đầu từ Telegram, extract frame, upload Cloudinary, cập nhật DB
+func (c *VideoController) generateTelegramVideoThumbnail(ctx context.Context, video *models.Video) (string, error) {
+	const chunkSize = 2 * 1024 * 1024 // 2MB đủ cho FFmpeg đọc frame đầu
+	fileSize := video.FileSize
+	if fileSize == 0 {
+		size, err := c.telegram.GetFileSize(ctx, video.TelegramMessageID)
+		if err != nil {
+			return "", fmt.Errorf("get file size: %w", err)
+		}
+		fileSize = size
+	}
+
+	toRead := chunkSize
+	if fileSize < int64(toRead) {
+		toRead = int(fileSize)
+	}
+	if toRead <= 0 {
+		return "", fmt.Errorf("video file size is 0")
+	}
+
+	tempDir := os.TempDir()
+	tempPath := filepath.Join(tempDir, fmt.Sprintf("tg_video_%s.mp4", video.ID.Hex()))
+	defer os.Remove(tempPath)
+
+	f, err := os.Create(tempPath)
+	if err != nil {
+		return "", fmt.Errorf("create temp file: %w", err)
+	}
+
+	err = c.telegram.StreamVideo(ctx, telegram.StreamRequest{
+		ChannelID: video.TelegramChannelID,
+		MessageID: video.TelegramMessageID,
+		FileID:    video.TelegramFileID,
+		Start:     0,
+		End:       int64(toRead) - 1,
+	}, f)
+	f.Close()
+	if err != nil {
+		return "", fmt.Errorf("stream chunk: %w", err)
+	}
+
+	thumbPath, err := telegram.ExtractThumbnail(tempPath, tempDir)
+	if err != nil {
+		return "", fmt.Errorf("extract thumbnail: %w", err)
+	}
+	defer os.Remove(thumbPath)
+
+	thumbResult, err := c.cloudinary.UploadImageFromPath(ctx, thumbPath, "video_thumbnails")
+	if err != nil {
+		return "", fmt.Errorf("upload to Cloudinary: %w", err)
+	}
+	if thumbResult.SecureURL == "" {
+		return "", fmt.Errorf("Cloudinary returned empty URL")
+	}
+
+	updateCtx, updateCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer updateCancel()
+
+	_, err = services.VideosCollection.UpdateOne(
+		updateCtx,
+		bson.M{"_id": video.ID},
+		bson.M{"$set": bson.M{
+			"thumbnail":   thumbResult.SecureURL,
+			"updated_at":  time.Now(),
+		}},
+	)
+	if err != nil {
+		return thumbResult.SecureURL, nil // vẫn redirect, nhưng DB chưa update
+	}
+
+	return thumbResult.SecureURL, nil
+}
+
 // GetTelegramStatus - Kiểm tra trạng thái Telegram service
 // GET /api/videos/telegram/status
 func (c *VideoController) GetTelegramStatus(ctx *fiber.Ctx) error {
@@ -318,7 +494,7 @@ func (c *VideoController) streamFromTelegram(ctx *fiber.Ctx, video *models.Video
 	fileSize := video.FileSize
 	if fileSize == 0 {
 		fmt.Printf("[StreamTelegram] FileSize is 0, fetching from Telegram for message %d\n", video.TelegramMessageID)
-		size, err := c.telegram.GetFileSize(context.Background(), video.TelegramMessageID)
+		size, err := c.telegram.GetFileSize(ctx.UserContext(), video.TelegramMessageID)
 		if err != nil {
 			fmt.Printf("[StreamTelegram] ERROR: Failed to get file size: %v\n", err)
 			return ctx.Status(500).JSON(fiber.Map{
@@ -366,8 +542,9 @@ func (c *VideoController) streamFromTelegram(ctx *fiber.Ctx, video *models.Video
 	fmt.Printf("[StreamTelegram] Starting stream from Telegram (Channel: %d, Message: %d)\n",
 		video.TelegramChannelID, video.TelegramMessageID)
 
+	streamCtx := ctx.UserContext()
 	ctx.Context().SetBodyStreamWriter(func(w *bufio.Writer) {
-		err := c.telegram.StreamVideo(context.Background(), telegram.StreamRequest{
+		err := c.telegram.StreamVideo(streamCtx, telegram.StreamRequest{
 			ChannelID: video.TelegramChannelID,
 			MessageID: video.TelegramMessageID,
 			FileID:    video.TelegramFileID,
@@ -424,7 +601,7 @@ func (c *VideoController) streamFromMega(ctx *fiber.Ctx, hash string) error {
 // Đối với app cá nhân: trả về TẤT CẢ video có status "ready"
 func (c *VideoController) GetMyVideos(ctx *fiber.Ctx) error {
 	// Xác thực user (không filter theo user vì đây là app cá nhân)
-	_ = ctx.Locals("userID").(string)
+	_, _ = middleware.GetUserID(ctx)
 
 	dbCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -454,7 +631,10 @@ func (c *VideoController) GetMyVideos(ctx *fiber.Ctx) error {
 // UploadVideo - Upload video mới (multi-thread processing)
 // POST /api/videos/upload
 func (c *VideoController) UploadVideo(ctx *fiber.Ctx) error {
-	userID := ctx.Locals("userID").(string)
+	userID, err := middleware.RequireUserID(ctx)
+	if err != nil {
+		return err
+	}
 	userObjID, _ := primitive.ObjectIDFromHex(userID)
 
 	// Parse form data
@@ -980,7 +1160,10 @@ func (c *VideoController) DeleteVideo(ctx *fiber.Ctx) error {
 // POST /api/videos/:id/like
 func (c *VideoController) LikeVideo(ctx *fiber.Ctx) error {
 	id := ctx.Params("id")
-	userID := ctx.Locals("userID").(string)
+	userID, err := middleware.RequireUserID(ctx)
+	if err != nil {
+		return err
+	}
 
 	objID, err := primitive.ObjectIDFromHex(id)
 	if err != nil {
@@ -1067,7 +1250,10 @@ func (c *VideoController) LikeVideo(ctx *fiber.Ctx) error {
 // POST /api/videos/:id/comments
 func (c *VideoController) AddComment(ctx *fiber.Ctx) error {
 	id := ctx.Params("id")
-	userID := ctx.Locals("userID").(string)
+	userID, err := middleware.RequireUserID(ctx)
+	if err != nil {
+		return err
+	}
 
 	objID, err := primitive.ObjectIDFromHex(id)
 	if err != nil {
@@ -1176,4 +1362,931 @@ func (c *VideoController) GetLatest(ctx *fiber.Ctx) error {
 	}
 
 	return ctx.JSON(videos)
+}
+
+// ============ TELEGRAM CHANNEL SYNC METHODS ============
+
+// SyncTelegramChannelStart - Bắt đầu sync nền, trả về ngay HTTP 202
+// POST /api/videos/telegram/sync/start
+func (c *VideoController) SyncTelegramChannelStart(ctx *fiber.Ctx) error {
+	userID, err := middleware.RequireUserID(ctx)
+	if err != nil {
+		return err
+	}
+	userObjID, _ := primitive.ObjectIDFromHex(userID)
+
+	if c.telegram == nil {
+		return ctx.Status(500).JSON(fiber.Map{"error": "Telegram service not initialized"})
+	}
+
+	// Check if sync already running (our state or scanner)
+	if c.telegramSync.getRunning() || c.telegram.IsScanning() {
+		return ctx.Status(409).JSON(fiber.Map{
+			"error": "Sync already in progress",
+		})
+	}
+
+	// Ensure Telegram connection
+	if !c.telegram.IsConnected() {
+		if startErr := c.telegram.StartPersistentConnection(context.Background()); startErr != nil {
+			return ctx.Status(500).JSON(fiber.Map{
+				"error": "Telegram not connected: " + startErr.Error(),
+			})
+		}
+		if !c.telegram.IsConnected() {
+			return ctx.Status(500).JSON(fiber.Map{"error": "Telegram connection failed"})
+		}
+	}
+
+	var req models.TelegramSyncRequest
+	_ = ctx.BodyParser(&req)
+
+	syncID := fmt.Sprintf("sync_%d", time.Now().UnixNano())
+	c.telegramSync.setRunning(syncID)
+
+	go c.runTelegramSyncBackground(userObjID, req)
+
+	return ctx.Status(202).JSON(fiber.Map{
+		"started": true,
+		"sync_id": syncID,
+	})
+}
+
+// getRunning returns whether a sync is currently running (helper for start handler)
+func (s *telegramSyncState) getRunning() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.IsRunning
+}
+
+// runTelegramSyncBackground - Worker chạy sync trong goroutine
+func (c *VideoController) runTelegramSyncBackground(userObjID primitive.ObjectID, req models.TelegramSyncRequest) {
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Printf("[Sync] PANIC recovered: %v\n%s\n", r, debug.Stack())
+			c.telegramSync.setDone(fmt.Sprintf("panic: %v", r))
+		}
+	}()
+
+	// Get min message ID from DB
+	dbCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	var lastDoc struct {
+		TelegramMessageID int `bson:"telegram_message_id"`
+	}
+	_ = services.TelegramChannelVideosCollection.FindOne(
+		dbCtx, bson.M{},
+		options.FindOne().SetSort(bson.D{{Key: "telegram_message_id", Value: -1}}),
+	).Decode(&lastDoc)
+	cancel()
+	minMsgID := lastDoc.TelegramMessageID
+
+	scanCtx, scanCancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer scanCancel()
+
+	videos, err := c.telegram.ScanChannelInConnection(scanCtx, telegram.ScanOptions{
+		ChannelID: req.ChannelID,
+		Limit:     req.Limit,
+		OffsetID:  req.OffsetID,
+		MinMsgID:  minMsgID,
+	})
+
+	if err != nil {
+		fmt.Printf("[Sync] ScanChannelInConnection failed: %v\n", err)
+		c.telegramSync.setDone(err.Error())
+		return
+	}
+
+	// Get existing IDs
+	existingMsgIDs := make(map[int]bool)
+	if len(videos) > 0 {
+		msgIDs := make([]int, len(videos))
+		for i, v := range videos {
+			msgIDs[i] = v.MsgID
+		}
+		cursor, curErr := services.TelegramChannelVideosCollection.Find(
+			context.Background(),
+			bson.M{"telegram_message_id": bson.M{"$in": msgIDs}},
+			options.Find().SetProjection(bson.M{"telegram_message_id": 1}),
+		)
+		if curErr == nil {
+			for cursor.Next(context.Background()) {
+				var doc struct{ TelegramMessageID int `bson:"telegram_message_id"` }
+				if cursor.Decode(&doc) == nil {
+					existingMsgIDs[doc.TelegramMessageID] = true
+				}
+			}
+			cursor.Close(context.Background())
+		}
+	}
+
+	total := len(videos)
+	newCount := 0
+	now := time.Now()
+
+	for i, video := range videos {
+		if existingMsgIDs[video.MsgID] {
+			c.telegramSync.setProgress(i+1, total, newCount)
+			continue
+		}
+
+		title := video.Text
+		if title == "" {
+			title = video.Name
+		}
+		if title == "" {
+			title = fmt.Sprintf("Video %d", video.MsgID)
+		}
+		if len(title) > 200 {
+			title = title[:200]
+		}
+
+		durationType := "short"
+		if video.Dur > 300 {
+			durationType = "medium"
+		}
+		if video.Dur > 600 {
+			durationType = "long"
+		}
+
+		thumbnailURL := ""
+		if video.ThumbID != "" && c.telegram != nil && c.cloudinary != nil {
+			thumbPath, thumbErr := downloadTelegramThumbnail(context.Background(), c.telegram, video.ChanID, video.MsgID)
+			if thumbErr == nil && thumbPath != "" {
+				thumbResult, uploadErr := c.cloudinary.UploadImageFromPath(context.Background(), thumbPath, "video_thumbnails")
+				if uploadErr == nil && thumbResult.SecureURL != "" {
+					thumbnailURL = thumbResult.SecureURL
+				}
+				os.Remove(thumbPath)
+			}
+		}
+
+		videoID := primitive.NewObjectID()
+		mainVideo := models.Video{
+			ID:                videoID,
+			Title:             title,
+			Description:       video.Text,
+			Thumbnail:         thumbnailURL,
+			StorageProvider:   models.StorageProviderTelegram,
+			TelegramChannelID: video.ChanID,
+			TelegramMessageID: video.MsgID,
+			TelegramFileID:    fmt.Sprintf("%d", video.DocID),
+			MimeType:          video.Mime,
+			Duration:          video.Dur,
+			DurationType:      durationType,
+			FileSize:          video.Size,
+			Width:             video.W,
+			Height:            video.H,
+			Status:            "ready",
+			UploadedBy:        userObjID,
+			CreatedAt:         now,
+			UpdatedAt:         now,
+		}
+
+		_, insErr := services.VideosCollection.InsertOne(context.Background(), mainVideo)
+		if insErr != nil {
+			c.telegramSync.setProgress(i+1, total, newCount)
+			continue
+		}
+
+		telegramVideo := models.TelegramChannelVideo{
+			TelegramMessageID:   video.MsgID,
+			TelegramGroupedID:   video.GrpID,
+			TelegramChannelID:   video.ChanID,
+			TelegramFileID:      fmt.Sprintf("%d", video.DocID),
+			TelegramFileRef:     video.FileRef,
+			TelegramAccessHash:  video.DocAccessHash,
+			Caption:             video.Text,
+			Duration:            video.Dur,
+			FileSize:            video.Size,
+			Width:               video.W,
+			Height:              video.H,
+			MimeType:            video.Mime,
+			FileName:            video.Name,
+			TelegramMessageDate: video.MsgDate,
+			SyncedAt:            now,
+			HasSpoiler:          video.Spoiler,
+			SupportsStreaming:   video.StreamingSupport,
+			IsPublished:         true,
+			PublishedVideoID:    videoID,
+		}
+
+		_, insErr = services.TelegramChannelVideosCollection.InsertOne(context.Background(), telegramVideo)
+		if insErr != nil {
+			if mongo.IsDuplicateKeyError(insErr) {
+				services.VideosCollection.DeleteOne(context.Background(), bson.M{"_id": videoID})
+			}
+		} else {
+			newCount++
+		}
+
+		c.telegramSync.setProgress(i+1, total, newCount)
+	}
+
+	c.telegramSync.setDone("")
+	fmt.Printf("[Sync] Background sync completed: %d new videos\n", newCount)
+}
+
+// SyncTelegramChannel - Đồng bộ video từ Telegram channel vào database và tự động publish (đồng bộ, giữ để tương thích)
+// POST /api/videos/telegram/sync
+func (c *VideoController) SyncTelegramChannel(ctx *fiber.Ctx) error {
+	// Get user ID for auto-publish (safe)
+	userID := ""
+	if v := ctx.Locals("userID"); v != nil {
+		if s, ok := v.(string); ok {
+			userID = s
+		}
+	}
+	if userID == "" {
+		fmt.Println("[Sync] ERROR: Missing authorization header or invalid session")
+		return ctx.Status(401).JSON(fiber.Map{"error": "Missing authorization header or unauthorized"})
+	}
+	userObjID, _ := primitive.ObjectIDFromHex(userID)
+
+	// Panic recovery and logging
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Printf("[Sync] PANIC recovered: %v\n%s\n", r, debug.Stack())
+		}
+	}()
+
+	if c.telegram == nil {
+		fmt.Println("[Sync] ERROR: Telegram service not initialized")
+		return ctx.Status(500).JSON(fiber.Map{
+			"error": "Telegram service not initialized",
+		})
+	}
+
+	if !c.telegram.IsConnected() {
+		// Try to start persistent connection automatically
+		fmt.Println("[Sync] Telegram service not connected - attempting to start persistent connection...")
+		startErr := c.telegram.StartPersistentConnection(context.Background())
+		if startErr != nil {
+			fmt.Printf("[Sync] Failed to start persistent connection: %v\n", startErr)
+			return ctx.Status(500).JSON(fiber.Map{
+				"error": "Telegram service not connected and failed to start connection: " + startErr.Error(),
+			})
+		}
+
+		// Wait briefly for connected state
+		if !c.telegram.IsConnected() {
+			fmt.Println("[Sync] Telegram still not connected after start attempt")
+			return ctx.Status(500).JSON(fiber.Map{
+				"error": "Telegram service not connected after start attempt",
+			})
+		}
+		fmt.Println("[Sync] Telegram persistent connection started successfully")
+	}
+
+	// Check if already scanning
+	if c.telegram.IsScanning() {
+		return ctx.Status(409).JSON(fiber.Map{
+			"error":  "Sync already in progress",
+			"status": c.telegram.GetScanStatus(),
+		})
+	}
+
+	// Parse request body (optional)
+	var req models.TelegramSyncRequest
+	ctx.BodyParser(&req)
+
+	// Get minimum message ID from database to avoid duplicates
+	dbCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	var minMsgID int
+	var lastVideo models.TelegramChannelVideo
+	err := services.TelegramChannelVideosCollection.FindOne(
+		dbCtx,
+		bson.M{},
+		options.FindOne().SetSort(bson.D{{Key: "telegram_message_id", Value: -1}}),
+	).Decode(&lastVideo)
+	if err == nil {
+		minMsgID = lastVideo.TelegramMessageID
+	}
+
+	fmt.Printf("[Sync] Starting sync - MinMsgID: %d, Limit: %d\n", minMsgID, req.Limit)
+
+	// Start scanning in connection
+	startTime := time.Now()
+	scanCtx, scanCancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer scanCancel()
+
+	videos, err := c.telegram.ScanChannelInConnection(scanCtx, telegram.ScanOptions{
+		ChannelID: req.ChannelID,
+		Limit:     req.Limit,
+		OffsetID:  req.OffsetID,
+		MinMsgID:  minMsgID,
+	})
+
+	if err != nil {
+		fmt.Printf("[Sync] ERROR: ScanChannelInConnection failed: %v\n", err)
+		return ctx.Status(500).JSON(fiber.Map{
+			"error": "Failed to scan channel: " + err.Error(),
+		})
+	}
+
+	// Get existing message IDs to check for duplicates
+	existingMsgIDs := make(map[int]bool)
+	if len(videos) > 0 {
+		msgIDs := make([]int, len(videos))
+		for i, v := range videos {
+			msgIDs[i] = v.MsgID
+		}
+
+		cursor, err := services.TelegramChannelVideosCollection.Find(
+			context.Background(),
+			bson.M{"telegram_message_id": bson.M{"$in": msgIDs}},
+			options.Find().SetProjection(bson.M{"telegram_message_id": 1}),
+		)
+		if err == nil {
+			defer cursor.Close(context.Background())
+			for cursor.Next(context.Background()) {
+				var doc struct {
+					TelegramMessageID int `bson:"telegram_message_id"`
+				}
+				if cursor.Decode(&doc) == nil {
+					existingMsgIDs[doc.TelegramMessageID] = true
+				}
+			}
+		}
+	}
+
+	fmt.Printf("[Sync] Found %d existing videos in DB, %d scanned from Telegram\n", len(existingMsgIDs), len(videos))
+
+	// Save only NEW videos to database AND auto-publish to Videos collection
+	newCount := 0
+	skippedCount := 0
+	now := time.Now()
+
+	for _, video := range videos {
+		// Skip if already exists
+		if existingMsgIDs[video.MsgID] {
+			skippedCount++
+			continue
+		}
+
+		// Generate title from caption or filename
+		title := video.Text
+		if title == "" {
+			title = video.Name
+		}
+		if title == "" {
+			title = fmt.Sprintf("Video %d", video.MsgID)
+		}
+		// Truncate title if too long (max 200 chars)
+		if len(title) > 200 {
+			title = title[:200]
+		}
+
+		// Determine duration type
+		durationType := "short"
+		if video.Dur > 300 {
+			durationType = "medium"
+		}
+		if video.Dur > 600 {
+			durationType = "long"
+		}
+
+		// Automatic thumbnail extraction from Telegram
+		thumbnailURL := ""
+		if video.ThumbID != "" && c.telegram != nil && c.cloudinary != nil {
+			thumbPath, thumbErr := downloadTelegramThumbnail(context.Background(), c.telegram, video.ChanID, video.MsgID)
+			if thumbErr == nil && thumbPath != "" {
+				thumbResult, uploadErr := c.cloudinary.UploadImageFromPath(context.Background(), thumbPath, "video_thumbnails")
+				if uploadErr == nil && thumbResult.SecureURL != "" {
+					thumbnailURL = thumbResult.SecureURL
+					fmt.Printf("[Sync] Uploaded thumbnail for video %d: %s\n", video.MsgID, thumbnailURL)
+				}
+				os.Remove(thumbPath)
+			} else if thumbErr != nil {
+				fmt.Printf("[Sync] Failed to download thumbnail for video %d: %v\n", video.MsgID, thumbErr)
+			}
+		}
+
+		// Create main Video entry (auto-publish)
+		videoID := primitive.NewObjectID()
+		mainVideo := models.Video{
+			ID:                videoID,
+			Title:             title,
+			Description:       video.Text,
+			Thumbnail:         thumbnailURL,
+			StorageProvider:   models.StorageProviderTelegram,
+			TelegramChannelID: video.ChanID,
+			TelegramMessageID: video.MsgID,
+			TelegramFileID:    fmt.Sprintf("%d", video.DocID),
+			MimeType:          video.Mime,
+			Duration:          video.Dur,
+			DurationType:      durationType,
+			FileSize:          video.Size,
+			Width:             video.W,
+			Height:            video.H,
+			Status:            "ready",
+			UploadedBy:        userObjID,
+			CreatedAt:         now,
+			UpdatedAt:         now,
+		}
+
+		// Insert main video first
+		_, err := services.VideosCollection.InsertOne(context.Background(), mainVideo)
+		if err != nil {
+			fmt.Printf("[Sync] Failed to create main video for message %d: %v\n", video.MsgID, err)
+			continue
+		}
+
+		// Create TelegramChannelVideo record (for reference/tracking)
+		telegramVideo := models.TelegramChannelVideo{
+			TelegramMessageID:   video.MsgID,
+			TelegramGroupedID:   video.GrpID,
+			TelegramChannelID:   video.ChanID,
+			TelegramFileID:      fmt.Sprintf("%d", video.DocID),
+			TelegramFileRef:     video.FileRef,
+			TelegramAccessHash:  video.DocAccessHash,
+			Caption:             video.Text,
+			Duration:            video.Dur,
+			FileSize:            video.Size,
+			Width:               video.W,
+			Height:              video.H,
+			MimeType:            video.Mime,
+			FileName:            video.Name,
+			TelegramMessageDate: video.MsgDate,
+			SyncedAt:            now,
+			HasSpoiler:          video.Spoiler,
+			SupportsStreaming:   video.StreamingSupport,
+			IsPublished:         true,
+			PublishedVideoID:    videoID,
+		}
+
+		// Insert telegram video record
+		_, err = services.TelegramChannelVideosCollection.InsertOne(
+			context.Background(),
+			telegramVideo,
+		)
+		if err != nil {
+			if mongo.IsDuplicateKeyError(err) {
+				// Rollback main video
+				services.VideosCollection.DeleteOne(context.Background(), bson.M{"_id": videoID})
+				skippedCount++
+			} else {
+				fmt.Printf("[Sync] Failed to save telegram video %d: %v\n", video.MsgID, err)
+			}
+		} else {
+			newCount++
+			fmt.Printf("[Sync] Auto-published video: %s (ID: %s)\n", title, videoID.Hex())
+		}
+	}
+
+	duration := time.Since(startTime)
+	status := c.telegram.GetScanStatus()
+
+	return ctx.JSON(fiber.Map{
+		"success":          true,
+		"message":          fmt.Sprintf("Synced %d new videos from Telegram channel", newCount),
+		"new_videos_count": newCount,
+		"skipped_count":    skippedCount,
+		"total_scanned":    status.TotalScanned,
+		"sync_duration":    duration.String(),
+	})
+}
+
+// downloadTelegramThumbnail - Download thumbnail từ Telegram, lưu vào temp file
+// Returns: path to temp file, error
+func downloadTelegramThumbnail(ctx context.Context, tgService *telegram.TelegramService, channelID int64, messageID int) (string, error) {
+	if tgService == nil {
+		return "", fmt.Errorf("Telegram service is nil")
+	}
+
+	var tempPath string
+	var resultErr error
+
+	err := tgService.ExecuteInConnection(ctx, func(execCtx context.Context) error {
+		client := tgService.Client()
+		api := client.GetAPI()
+
+		messages, err := api.ChannelsGetMessages(execCtx, &tg.ChannelsGetMessagesRequest{
+			Channel: &tg.InputChannel{ChannelID: channelID, AccessHash: client.GetAccessHash()},
+			ID:      []tg.InputMessageClass{&tg.InputMessageID{ID: messageID}},
+		})
+		if err != nil {
+			resultErr = fmt.Errorf("failed to get message: %w", err)
+			return resultErr
+		}
+
+		channelMessages, ok := messages.(*tg.MessagesChannelMessages)
+		if !ok || len(channelMessages.Messages) == 0 {
+			resultErr = fmt.Errorf("message not found")
+			return resultErr
+		}
+
+		msg, ok := channelMessages.Messages[0].(*tg.Message)
+		if !ok {
+			resultErr = fmt.Errorf("message not found")
+			return resultErr
+		}
+
+		media, ok := msg.Media.(*tg.MessageMediaDocument)
+		if !ok {
+			resultErr = fmt.Errorf("no document media")
+			return resultErr
+		}
+
+		doc, ok := media.Document.(*tg.Document)
+		if !ok {
+			resultErr = fmt.Errorf("no document")
+			return resultErr
+		}
+
+		if len(doc.Thumbs) == 0 {
+			resultErr = fmt.Errorf("no thumbnail available")
+			return resultErr
+		}
+
+		thumb := doc.Thumbs[0]
+
+		// Extract thumb type and approximate size from concrete types
+		var thumbType string
+		var thumbLimit int
+		switch t := thumb.(type) {
+		case *tg.PhotoSize:
+			thumbType = t.Type
+			thumbLimit = int(t.Size)
+		case *tg.PhotoCachedSize:
+			thumbType = t.Type
+			thumbLimit = len(t.Bytes)
+		default:
+			// Fallback: request a small limit or full document size
+			thumbType = ""
+			if doc.Size > 0 {
+				thumbLimit = int(doc.Size)
+			} else {
+				thumbLimit = 64 * 1024 // 64KB
+			}
+		}
+
+		thumbLocation := &tg.InputDocumentFileLocation{
+			ID:            doc.ID,
+			AccessHash:    doc.AccessHash,
+			FileReference: doc.FileReference,
+			ThumbSize:     thumbType,
+		}
+
+		file, err := api.UploadGetFile(execCtx, &tg.UploadGetFileRequest{
+			Location:     thumbLocation,
+			Offset:       0,
+			Limit:        thumbLimit,
+			Precise:      true,
+			CDNSupported: false,
+		})
+		if err != nil {
+			resultErr = fmt.Errorf("failed to download thumbnail: %w", err)
+			return resultErr
+		}
+
+		fileResult, ok := file.(*tg.UploadFile)
+		if !ok {
+			resultErr = fmt.Errorf("unexpected file result")
+			return resultErr
+		}
+
+		tempDir := os.TempDir()
+		tempPath = filepath.Join(tempDir, fmt.Sprintf("tg_thumb_%d_%d.jpg", channelID, messageID))
+		err = os.WriteFile(tempPath, fileResult.Bytes, 0644)
+		if err != nil {
+			resultErr = fmt.Errorf("failed to save thumbnail: %w", err)
+			return resultErr
+		}
+
+		return nil
+	})
+
+	if resultErr != nil {
+		return "", resultErr
+	}
+	if err != nil {
+		return "", err
+	}
+
+	return tempPath, nil
+}
+
+// GetSyncStatus - Lấy trạng thái đồng bộ hiện tại (async sync job)
+// GET /api/videos/telegram/sync/status
+func (c *VideoController) GetSyncStatus(ctx *fiber.Ctx) error {
+	if c.telegram == nil {
+		return ctx.Status(500).JSON(fiber.Map{
+			"error": "Telegram service not initialized",
+		})
+	}
+
+	running, syncID, progress, total, newCount, lastErr := c.telegramSync.get()
+	resp := fiber.Map{
+		"is_running":       running,
+		"sync_id":          syncID,
+		"current_progress": progress,
+		"total":            total,
+		"new_count":        newCount,
+	}
+	if lastErr != "" {
+		resp["last_error"] = lastErr
+	} else {
+		resp["last_error"] = nil
+	}
+	return ctx.JSON(resp)
+}
+
+// GetTelegramVideos - Lấy danh sách video đã đồng bộ từ Telegram
+// GET /api/videos/telegram/list
+func (c *VideoController) GetTelegramVideos(ctx *fiber.Ctx) error {
+	page := ctx.QueryInt("page", 1)
+	limit := ctx.QueryInt("limit", 20)
+	if limit > 100 {
+		limit = 100
+	}
+	skip := (page - 1) * limit
+
+	// Build filter
+	filter := bson.M{}
+	if published := ctx.Query("published"); published != "" {
+		filter["is_published"] = published == "true"
+	}
+
+	dbCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	// Count total
+	total, err := services.TelegramChannelVideosCollection.CountDocuments(dbCtx, filter)
+	if err != nil {
+		return ctx.Status(500).JSON(fiber.Map{
+			"error": "Failed to count videos",
+		})
+	}
+
+	// Find videos
+	findOptions := options.Find().
+		SetSkip(int64(skip)).
+		SetLimit(int64(limit)).
+		SetSort(bson.D{{Key: "telegram_message_date", Value: -1}})
+
+	cursor, err := services.TelegramChannelVideosCollection.Find(dbCtx, filter, findOptions)
+	if err != nil {
+		return ctx.Status(500).JSON(fiber.Map{
+			"error": "Failed to fetch videos",
+		})
+	}
+	defer cursor.Close(dbCtx)
+
+	var videos []models.TelegramChannelVideo
+	if err := cursor.All(dbCtx, &videos); err != nil {
+		return ctx.Status(500).JSON(fiber.Map{
+			"error": "Failed to decode videos",
+		})
+	}
+
+	totalPages := int(float64(total) / float64(limit))
+	if total%int64(limit) > 0 {
+		totalPages++
+	}
+
+	return ctx.JSON(models.TelegramChannelVideoListResponse{
+		Videos:     videos,
+		Total:      total,
+		Page:       page,
+		Limit:      limit,
+		TotalPages: totalPages,
+	})
+}
+
+// PublishTelegramVideo - Publish video từ Telegram thành Video chính
+// POST /api/videos/telegram/:id/publish
+func (c *VideoController) PublishTelegramVideo(ctx *fiber.Ctx) error {
+	userID, err := middleware.RequireUserID(ctx)
+	if err != nil {
+		return err
+	}
+	userObjID, _ := primitive.ObjectIDFromHex(userID)
+
+	id := ctx.Params("id")
+	objID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		return ctx.Status(400).JSON(fiber.Map{
+			"error": "Invalid video ID",
+		})
+	}
+
+	// Parse request body
+	var req struct {
+		Title       string   `json:"title"`
+		Description string   `json:"description"`
+		Tags        []string `json:"tags"`
+		Genres      []string `json:"genres"`
+	}
+	if err := ctx.BodyParser(&req); err != nil {
+		return ctx.Status(400).JSON(fiber.Map{
+			"error": "Invalid request body",
+		})
+	}
+
+	if req.Title == "" {
+		return ctx.Status(400).JSON(fiber.Map{
+			"error": "Title is required",
+		})
+	}
+
+	// Find Telegram video
+	dbCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	var telegramVideo models.TelegramChannelVideo
+	err = services.TelegramChannelVideosCollection.FindOne(dbCtx, bson.M{"_id": objID}).Decode(&telegramVideo)
+	if err != nil {
+		return ctx.Status(404).JSON(fiber.Map{
+			"error": "Telegram video not found",
+		})
+	}
+
+	if telegramVideo.IsPublished {
+		return ctx.Status(400).JSON(fiber.Map{
+			"error":    "Video already published",
+			"video_id": telegramVideo.PublishedVideoID.Hex(),
+		})
+	}
+
+	// Determine duration type
+	durationType := "short"
+	if telegramVideo.Duration > 300 {
+		durationType = "medium"
+	}
+	if telegramVideo.Duration > 600 {
+		durationType = "long"
+	}
+
+	// Create main Video from TelegramChannelVideo
+	now := time.Now()
+	video := models.Video{
+		ID:                primitive.NewObjectID(),
+		Title:             req.Title,
+		Description:       req.Description,
+		Tags:              req.Tags,
+		Genres:            req.Genres,
+		StorageProvider:   models.StorageProviderTelegram,
+		TelegramChannelID: telegramVideo.TelegramChannelID,
+		TelegramMessageID: telegramVideo.TelegramMessageID,
+		TelegramFileID:    telegramVideo.TelegramFileID,
+		MimeType:          telegramVideo.MimeType,
+		Duration:          telegramVideo.Duration,
+		DurationType:      durationType,
+		FileSize:          telegramVideo.FileSize,
+		Width:             telegramVideo.Width,
+		Height:            telegramVideo.Height,
+		Status:            "ready",
+		UploadedBy:        userObjID,
+		CreatedAt:         now,
+		UpdatedAt:         now,
+	}
+
+	// Insert video
+	_, err = services.VideosCollection.InsertOne(dbCtx, video)
+	if err != nil {
+		return ctx.Status(500).JSON(fiber.Map{
+			"error": "Failed to create video: " + err.Error(),
+		})
+	}
+
+	// Update Telegram video as published
+	_, err = services.TelegramChannelVideosCollection.UpdateOne(
+		dbCtx,
+		bson.M{"_id": objID},
+		bson.M{"$set": bson.M{
+			"is_published":       true,
+			"published_video_id": video.ID,
+		}},
+	)
+	if err != nil {
+		fmt.Printf("[Publish] Warning: Failed to update telegram video status: %v\n", err)
+	}
+
+	return ctx.Status(201).JSON(fiber.Map{
+		"message": "Video published successfully",
+		"video":   video,
+	})
+}
+
+// StreamTelegramChannelVideo - Stream video trực tiếp từ Telegram channel video
+// GET /api/videos/telegram/:id/stream
+func (c *VideoController) StreamTelegramChannelVideo(ctx *fiber.Ctx) error {
+	id := ctx.Params("id")
+	objID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		return ctx.Status(400).JSON(fiber.Map{
+			"error": "Invalid video ID",
+		})
+	}
+
+	// Find Telegram video
+	dbCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	var telegramVideo models.TelegramChannelVideo
+	err = services.TelegramChannelVideosCollection.FindOne(dbCtx, bson.M{"_id": objID}).Decode(&telegramVideo)
+	if err != nil {
+		return ctx.Status(404).JSON(fiber.Map{
+			"error": "Video not found",
+		})
+	}
+
+	// Check Telegram connection
+	if c.telegram == nil || !c.telegram.IsConnected() {
+		return ctx.Status(500).JSON(fiber.Map{
+			"error": "Telegram service not connected",
+		})
+	}
+
+	// Get file size
+	fileSize := telegramVideo.FileSize
+	if fileSize == 0 {
+		size, err := c.telegram.GetFileSize(context.Background(), telegramVideo.TelegramMessageID)
+		if err != nil {
+			return ctx.Status(500).JSON(fiber.Map{
+				"error": "Failed to get file size: " + err.Error(),
+			})
+		}
+		fileSize = size
+	}
+
+	// Parse Range header
+	rangeHeader := ctx.Get("Range")
+	start, end, err := telegram.ParseRangeHeader(rangeHeader, fileSize)
+	if err != nil {
+		return ctx.Status(416).JSON(fiber.Map{
+			"error": "Range not satisfiable",
+		})
+	}
+
+	// Determine content type
+	contentType := telegramVideo.MimeType
+	if contentType == "" {
+		contentType = "video/mp4"
+	}
+
+	// Set response headers
+	ctx.Set("Content-Type", contentType)
+	ctx.Set("Accept-Ranges", "bytes")
+	ctx.Set("Cache-Control", "public, max-age=3600")
+
+	if rangeHeader != "" {
+		ctx.Set("Content-Length", fmt.Sprintf("%d", end-start+1))
+		ctx.Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, end, fileSize))
+		ctx.Status(206)
+	} else {
+		ctx.Set("Content-Length", fmt.Sprintf("%d", fileSize))
+		ctx.Status(200)
+	}
+
+	// Stream video content
+	ctx.Context().SetBodyStreamWriter(func(w *bufio.Writer) {
+		err := c.telegram.StreamVideo(context.Background(), telegram.StreamRequest{
+			ChannelID: telegramVideo.TelegramChannelID,
+			MessageID: telegramVideo.TelegramMessageID,
+			FileID:    telegramVideo.TelegramFileID,
+			Start:     start,
+			End:       end,
+		}, w)
+		if err != nil {
+			fmt.Printf("[StreamTelegramChannel] ERROR: %v\n", err)
+		}
+		w.Flush()
+	})
+
+	return nil
+}
+
+// DeleteTelegramVideo - Xóa video đã đồng bộ (không xóa trên Telegram)
+// DELETE /api/videos/telegram/:id
+func (c *VideoController) DeleteTelegramVideo(ctx *fiber.Ctx) error {
+	id := ctx.Params("id")
+	objID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		return ctx.Status(400).JSON(fiber.Map{
+			"error": "Invalid video ID",
+		})
+	}
+
+	dbCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	result, err := services.TelegramChannelVideosCollection.DeleteOne(dbCtx, bson.M{"_id": objID})
+	if err != nil {
+		return ctx.Status(500).JSON(fiber.Map{
+			"error": "Failed to delete video",
+		})
+	}
+
+	if result.DeletedCount == 0 {
+		return ctx.Status(404).JSON(fiber.Map{
+			"error": "Video not found",
+		})
+	}
+
+	return ctx.JSON(fiber.Map{
+		"message": "Video deleted successfully",
+	})
 }

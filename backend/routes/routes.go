@@ -98,15 +98,25 @@ func SetupRoutes(app *fiber.App) {
 	videos.Get("/trending", videoController.GetTrending)
 	videos.Get("/latest", videoController.GetLatest)
 	videos.Get("/upload/progress/:id", videoController.GetUploadProgress)
-	videos.Get("/telegram/status", videoController.GetTelegramStatus) // Telegram status check
-	videos.Get("/stream/mega/:hash", videoController.StreamMegaVideo) // Mega streaming (legacy)
-	videos.Get("/stream/:id", videoController.StreamVideo)            // Unified streaming (Telegram/Cloudinary/Mega)
+	videos.Get("/telegram/status", videoController.GetTelegramStatus)              // Telegram status check
+	videos.Get("/telegram/sync/status", videoController.GetSyncStatus)             // Sync status
+	videos.Get("/telegram/list", videoController.GetTelegramVideos)                // List synced videos
+	videos.Get("/telegram/:id/stream", videoController.StreamTelegramChannelVideo) // Stream synced video
+	videos.Get("/stream/mega/:hash", videoController.StreamMegaVideo)              // Mega streaming (legacy)
+	videos.Get("/stream/:id", videoController.StreamVideo)                         // Unified streaming (Telegram/Cloudinary/Mega)
+
+	// PROTECTED Telegram sync routes (sync/start before sync for route precedence)
+	videos.Post("/telegram/sync/start", middleware.AuthMiddleware(), videoController.SyncTelegramChannelStart) // Async sync - returns 202
+	videos.Post("/telegram/sync", middleware.AuthMiddleware(), videoController.SyncTelegramChannel)            // Sync (legacy, blocking)
+	videos.Post("/telegram/:id/publish", middleware.AuthMiddleware(), videoController.PublishTelegramVideo) // Publish video
+	videos.Delete("/telegram/:id", middleware.AuthMiddleware(), videoController.DeleteTelegramVideo)        // Delete synced video
 
 	// PROTECTED routes with specific paths (must come before /:id)
 	videos.Get("/my", middleware.AuthMiddleware(), videoController.GetMyVideos)
 	videos.Post("/upload", middleware.AuthMiddleware(), videoController.UploadVideo)
 
-	// PUBLIC routes with dynamic :id
+	// PUBLIC routes with dynamic :id (:id/thumbnail before :id for correct matching)
+	videos.Get("/:id/thumbnail", videoController.GetVideoThumbnail)
 	videos.Get("/", videoController.GetVideos)
 	videos.Get("/:id", videoController.GetVideo)
 

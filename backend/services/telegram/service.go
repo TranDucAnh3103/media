@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"sync"
+	"time"
 
 	"github.com/gotd/td/tg"
 )
@@ -15,8 +16,23 @@ type TelegramService struct {
 	client     *TelegramClient
 	uploader   *TelegramUploader
 	streamer   *TelegramStreamer
-	protection *ProtectionLayer
-	mu         sync.RWMutex
+	scanner        *ChannelScanner
+	protection     *ProtectionLayer
+	circuitBreaker *CircuitBreaker
+	mu             sync.RWMutex
+}
+
+// ClientAccessor - interface nhỏ để truy xuất API và access hash từ client
+type ClientAccessor interface {
+	GetAPI() *tg.Client
+	GetAccessHash() int64
+	GetChannelID() int64
+	GetInputChannel() *tg.InputChannel
+}
+
+// Client - Trả về client theo interface an toàn (không expose toàn bộ struct)
+func (s *TelegramService) Client() ClientAccessor {
+	return s.client
 }
 
 // NewTelegramService - Tạo instance mới của TelegramService
@@ -31,13 +47,19 @@ func NewTelegramService() (*TelegramService, error) {
 	protectionConfig := DefaultProtectionConfig()
 	protection := NewProtectionLayer(protectionConfig)
 
+	// Create circuit breaker: block for 30s after 3 consecutive failures
+	cb := NewCircuitBreaker(3, 30*time.Second)
+	client.SetCircuitBreaker(cb)
+
 	log.Println("[TelegramService] Initialized with anti-ban protection layer")
 
 	return &TelegramService{
-		client:     client,
-		uploader:   NewTelegramUploader(client),
-		streamer:   NewTelegramStreamer(client),
-		protection: protection,
+		client:         client,
+		uploader:       NewTelegramUploader(client),
+		streamer:       NewTelegramStreamer(client, cb),
+		scanner:        NewChannelScanner(client),
+		protection:     protection,
+		circuitBreaker: cb,
 	}, nil
 }
 
@@ -49,14 +71,19 @@ func NewTelegramServiceWithConfig(protectionConfig ProtectionConfig) (*TelegramS
 	}
 
 	protection := NewProtectionLayer(protectionConfig)
+	
+	cb := NewCircuitBreaker(3, 30*time.Second)
+	client.SetCircuitBreaker(cb)
 
 	log.Println("[TelegramService] Initialized with custom protection config")
 
 	return &TelegramService{
-		client:     client,
-		uploader:   NewTelegramUploader(client),
-		streamer:   NewTelegramStreamer(client),
-		protection: protection,
+		client:         client,
+		uploader:       NewTelegramUploader(client),
+		streamer:       NewTelegramStreamer(client, cb),
+		scanner:        NewChannelScanner(client),
+		protection:     protection,
+		circuitBreaker: cb,
 	}, nil
 }
 
@@ -78,6 +105,9 @@ func (s *TelegramService) Disconnect() error {
 
 // IsConnected - Kiểm tra trạng thái kết nối
 func (s *TelegramService) IsConnected() bool {
+	if s.circuitBreaker != nil && !s.circuitBreaker.AllowRequest() {
+		return false // Circuit breaker is OPEN, block the request
+	}
 	return s.client.IsConnected()
 }
 
@@ -382,4 +412,89 @@ func extractUserID(ctx context.Context) string {
 		return userID
 	}
 	return "anonymous"
+}
+
+// ============ CHANNEL SCANNER METHODS ============
+
+// ScanChannel - Quét channel để lấy danh sách video
+// Cần chạy trong persistent connection context
+func (s *TelegramService) ScanChannel(ctx context.Context, opts ScanOptions) ([]ChannelVideoMeta, error) {
+	if s.scanner == nil {
+		return nil, fmt.Errorf("scanner not initialized")
+	}
+	return s.scanner.ScanChannel(ctx, opts)
+}
+
+// ScanChannelInConnection - Quét channel sử dụng ExecuteInConnection
+func (s *TelegramService) ScanChannelInConnection(ctx context.Context, opts ScanOptions) ([]ChannelVideoMeta, error) {
+	if s.scanner == nil {
+		return nil, fmt.Errorf("scanner not initialized")
+	}
+
+	var videos []ChannelVideoMeta
+	var scanErr error
+
+	err := s.client.ExecuteInConnection(ctx, func(connCtx context.Context) error {
+		videos, scanErr = s.scanner.ScanChannel(connCtx, opts)
+		return scanErr
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return videos, nil
+}
+
+// GetScanStatus - Lấy trạng thái quét hiện tại
+func (s *TelegramService) GetScanStatus() ScanStatus {
+	if s.scanner == nil {
+		return ScanStatus{}
+	}
+	return s.scanner.GetStatus()
+}
+
+// IsScanning - Kiểm tra xem đang quét không
+func (s *TelegramService) IsScanning() bool {
+	if s.scanner == nil {
+		return false
+	}
+	return s.scanner.IsScanning()
+}
+
+// RefreshFileReference - Làm mới file reference cho video
+func (s *TelegramService) RefreshFileReference(ctx context.Context, messageID int) ([]byte, error) {
+	if s.scanner == nil {
+		return nil, fmt.Errorf("scanner not initialized")
+	}
+
+	channelID := s.client.GetChannelID()
+	accessHash := s.client.GetAccessHash()
+
+	var fileRef []byte
+	var refErr error
+
+	err := s.client.ExecuteInConnection(ctx, func(connCtx context.Context) error {
+		fileRef, refErr = s.scanner.RefreshFileReference(connCtx, channelID, accessHash, messageID)
+		return refErr
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return fileRef, nil
+}
+
+// GetScanner - Lấy scanner instance
+func (s *TelegramService) GetScanner() *ChannelScanner {
+	return s.scanner
+}
+
+// GetClient - Lấy client instance
+func (s *TelegramService) GetClient() *TelegramClient {
+	return s.client
+}
+
+// GetAccessHash - Lấy access hash của channel
+func (s *TelegramService) GetAccessHash() int64 {
+	return s.client.GetAccessHash()
 }

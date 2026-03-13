@@ -1,7 +1,7 @@
 import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { 
-  ChevronLeftIcon, 
+import {
+  ChevronLeftIcon,
   ChevronRightIcon,
   ArrowLeftIcon,
   ListBulletIcon,
@@ -69,62 +69,31 @@ const ComicReader = () => {
           <div className="flex items-center justify-between">
             {/* Left - Back button + Comic info */}
             <div className="flex items-center gap-2 min-w-0">
-              <button 
+              <button
                 onClick={() => navigate(`/comics/${id}`)}
                 className="p-2 text-gray-400 hover:text-white rounded-full hover:bg-white/10 active:scale-95 transition-all"
                 aria-label="Quay lại"
               >
                 <ArrowLeftIcon className="w-5 h-5" />
               </button>
-              
+
               <div className="min-w-0">
                 <h1 className="text-white font-medium truncate text-sm md:text-base">{comic?.title}</h1>
-                <p className="text-xs md:text-sm text-gray-400">
+                {/* <p className="text-xs md:text-sm text-gray-400">
                   Chapter {chapterNum}
                   {chapterData.title && ` - ${chapterData.title}`}
-                </p>
+                </p> */}
               </div>
             </div>
 
             {/* Right - Chapter navigation */}
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => prevChapter && goToChapter(prevChapter.number)}
-                disabled={!prevChapter}
-                className="p-2 text-gray-400 hover:text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
-                title="Chapter trước"
-              >
-                <ChevronLeftIcon className="w-5 h-5" />
-              </button>
-
-              {/* Chapter selector */}
-              <select
-                value={chapterNum}
-                onChange={(e) => goToChapter(parseInt(e.target.value))}
-                className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-primary-500"
-              >
-                {sortedChapters.map((ch) => (
-                  <option key={ch.number} value={ch.number}>
-                    Ch. {ch.number}
-                  </option>
-                ))}
-              </select>
-
-              <button
-                onClick={() => nextChapter && goToChapter(nextChapter.number)}
-                disabled={!nextChapter}
-                className="p-2 text-gray-400 hover:text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
-                title="Chapter sau"
-              >
-                <ChevronRightIcon className="w-5 h-5" />
-              </button>
-
               <Link
                 to={`/comics/${id}`}
                 className="hidden sm:flex items-center gap-1 px-3 py-2 text-gray-400 hover:text-white rounded-lg hover:bg-gray-800"
               >
                 <ListBulletIcon className="w-5 h-5" />
-                <span>Danh sách</span>
+                <span>Quay lại truyện</span>
               </Link>
             </div>
           </div>
@@ -140,33 +109,15 @@ const ComicReader = () => {
       />
 
       {/* Bottom navigation */}
-      <div className="bg-gray-800 border-t border-gray-700 py-4">
+      {/* <div className="bg-gray-800 border-t border-gray-700 py-4">
         <div className="container-custom">
-          <div className="flex items-center justify-between">
-            <button
-              onClick={() => prevChapter && goToChapter(prevChapter.number)}
-              disabled={!prevChapter}
-              className="btn-secondary flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <ChevronLeftIcon className="w-5 h-5" />
-              <span>Chapter trước</span>
-            </button>
-
+          <div className="flex items-center justify-end">
             <Link to={`/comics/${id}`} className="btn-secondary">
               <ListBulletIcon className="w-5 h-5" />
             </Link>
-
-            <button
-              onClick={() => nextChapter && goToChapter(nextChapter.number)}
-              disabled={!nextChapter}
-              className="btn-primary flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <span>Chapter sau</span>
-              <ChevronRightIcon className="w-5 h-5" />
-            </button>
           </div>
         </div>
-      </div>
+      </div> */}
     </div>
   )
 }

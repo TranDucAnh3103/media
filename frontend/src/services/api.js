@@ -157,4 +157,30 @@ export const syncAPI = {
   syncComics: () => api.post('/sync/comics', null, { timeout: 120000 }), // 2 min timeout
 }
 
+// ============ TELEGRAM API ============
+export const telegramAPI = {
+  // Get Telegram connection status
+  getStatus: () => api.get('/videos/telegram/status'),
+  
+  // Sync videos from Telegram channel
+  syncChannel: (params = {}) => api.post('/videos/telegram/sync', params, { 
+    timeout: 300000 // 5 min timeout for large channels
+  }),
+  
+  // Get sync status (while syncing)
+  getSyncStatus: () => api.get('/videos/telegram/sync/status'),
+  
+  // List synced videos from channel
+  getVideos: (params) => api.get('/videos/telegram/list', { params }),
+  
+  // Publish a synced video (make it a main video)
+  publishVideo: (id, data) => api.post(`/videos/telegram/${id}/publish`, data),
+  
+  // Delete synced video (from database only)
+  deleteVideo: (id) => api.delete(`/videos/telegram/${id}`),
+  
+  // Get stream URL for channel video
+  getStreamURL: (id) => `${baseURL}/videos/telegram/${id}/stream`,
+}
+
 export default api

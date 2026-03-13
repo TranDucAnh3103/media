@@ -17,17 +17,17 @@ const Layout = () => {
     <div className="min-h-screen bg-gray-950">
       {/* Desktop navbar - ẩn trên mobile */}
       <Navbar />
-      
+
       {/* Main content */}
       <main className="pt-0 md:pt-16 pb-20 md:pb-0 min-h-screen">
         <Outlet />
       </main>
-      
+
       {/* Footer - ẩn trên mobile để không chồng với bottom nav */}
       <footer className="hidden md:block bg-gray-900 border-t border-white/5 py-8">
         <div className="container-custom text-center">
           <p className="text-gray-500 text-sm">
-            &copy; 2026 MediaHub. All rights reserved.
+            &copy; 2026 MediaHub. Persional website.
           </p>
         </div>
       </footer>
