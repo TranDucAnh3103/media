@@ -45,7 +45,7 @@ const Navbar = () => {
   return (
     <header className="fixed top-0 left-0 right-0 z-50 hidden md:block">
       {/* Glass morphism background - pointer-events-none to allow clicks through */}
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-2xl border-b border-white/5 pointer-events-none" />
+      <div className="absolute inset-0 bg-gray-950/70 backdrop-blur-2xl border-b border-white/5 shadow-sm shadow-black/20 pointer-events-none" />
       
       <nav className="relative container-custom">
         <div className="flex items-center justify-between h-16">
@@ -60,15 +60,15 @@ const Navbar = () => {
           </Link>
 
           {/* Center Navigation */}
-          <div className="flex items-center gap-1 bg-white/5 rounded-full px-2 py-1">
+          <div className="flex items-center gap-2 bg-white/5 rounded-full px-2 py-1 relative">
             {navLinks.map((link) => (
               <NavLink
                 key={link.name}
                 to={link.href}
                 className={({ isActive }) => `
-                  px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-200
+                  px-5 py-1.5 rounded-full text-sm font-medium transition-all duration-300
                   ${isActive 
-                    ? 'bg-white/10 text-white' 
+                    ? 'bg-white/10 text-white shadow-sm ring-1 ring-white/10' 
                     : 'text-gray-400 hover:text-white hover:bg-white/5'
                   }
                 `}
@@ -109,10 +109,10 @@ const Navbar = () => {
               <button
                 onClick={() => setNotifOpen(true)}
                 aria-expanded={notifOpen}
-                className="relative p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-full transition-all"
+                className="relative p-2.5 text-gray-400 hover:text-white hover:bg-white/10 rounded-full transition-all duration-300"
               >
                 <BellIcon className="w-5 h-5" />
-                <span className="absolute top-1 right-1 w-2 h-2 bg-fuchsia-500 rounded-full" />
+                <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-fuchsia-500 rounded-full shadow-[0_0_8px_rgba(217,70,239,0.8)]" />
               </button>
             )}
 
@@ -120,7 +120,7 @@ const Navbar = () => {
             {user && (
               <Link
                 to="/upload"
-                className="flex items-center gap-2 px-4 py-1.5 bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 text-white text-sm font-medium rounded-full transition-all duration-300 hover:shadow-lg hover:shadow-violet-500/25"
+                className="flex items-center gap-2 px-5 py-2 bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 text-white text-sm font-medium rounded-full transition-all duration-300 shadow-[0_0_15px_rgba(139,92,246,0.3)] hover:shadow-[0_0_20px_rgba(139,92,246,0.5)] hover:scale-105"
               >
                 <CloudArrowUpIcon className="w-4 h-4" />
                 <span>Upload</span>
@@ -129,16 +129,16 @@ const Navbar = () => {
 
             {/* User menu */}
             {user ? (
-              <Menu as="div" className="relative">
-                <Menu.Button className="flex items-center gap-2 p-1 rounded-full hover:bg-white/10 transition-all">
+              <Menu as="div" className="relative ml-2">
+                <Menu.Button className="flex items-center gap-2 p-0.5 rounded-full ring-2 ring-violet-500/30 hover:ring-violet-500/60 transition-all duration-300 focus:outline-none">
                   {user.avatar ? (
                     <img
                       src={user.avatar}
                       alt={user.username}
-                      className="w-8 h-8 rounded-full object-cover ring-2 ring-white/20"
+                      className="w-9 h-9 rounded-full object-cover"
                     />
                   ) : (
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center">
+                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center">
                       <span className="text-sm font-bold text-white">
                         {user.username?.charAt(0).toUpperCase()}
                       </span>

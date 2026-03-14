@@ -78,7 +78,7 @@ const Login = () => {
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="bg-gray-800 rounded-xl p-6 shadow-xl">
+        <form onSubmit={handleSubmit} className="bg-white/[0.03] backdrop-blur-xl rounded-3xl p-6 md:p-8 shadow-2xl border border-white/5 relative z-10">
           {/* Email */}
           <div className="mb-4">
             <label className="block text-sm text-gray-400 mb-1">Email</label>
@@ -88,7 +88,7 @@ const Login = () => {
                 type="email"
                 value={form.email}
                 onChange={(e) => setForm({ ...form, email: e.target.value })}
-                className={`input pl-10 ${errors.email ? 'border-red-500' : ''}`}
+                className={`input pl-11 h-12 rounded-xl bg-white/5 border border-white/10 text-white placeholder-gray-500 focus:bg-white/10 focus:border-violet-500/50 transition-all ${errors.email ? 'border-red-500/50 focus:border-red-500' : ''}`}
                 placeholder="demo@mediahub.com"
                 autoComplete="email"
               />
@@ -107,7 +107,7 @@ const Login = () => {
                 type="password"
                 value={form.password}
                 onChange={(e) => setForm({ ...form, password: e.target.value })}
-                className={`input pl-10 ${errors.password ? 'border-red-500' : ''}`}
+                className={`input pl-11 h-12 rounded-xl bg-white/5 border border-white/10 text-white placeholder-gray-500 focus:bg-white/10 focus:border-violet-500/50 transition-all ${errors.password ? 'border-red-500/50 focus:border-red-500' : ''}`}
                 placeholder="••••••••"
                 autoComplete="current-password"
               />
@@ -128,7 +128,7 @@ const Login = () => {
           <button
             type="submit"
             disabled={isLoading}
-            className="btn-primary w-full disabled:opacity-50"
+            className="w-full flex justify-center py-3.5 px-4 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:scale-[1.02] hover:shadow-[0_4px_20px_rgba(139,92,246,0.4)] transition-all duration-300 disabled:opacity-50 disabled:hover:scale-100"
           >
             {isLoading ? 'Đang đăng nhập...' : 'Đăng nhập'}
           </button>
@@ -142,57 +142,30 @@ const Login = () => {
           </p>
 
           {/* Quick login buttons */}
-          <div className="mt-6 pt-6 border-t border-gray-700">
-            <p className="text-center text-gray-500 text-sm mb-3">Đăng nhập nhanh (Dev)</p>
+          <div className="mt-8 pt-6 border-t border-white/10">
+            <p className="text-center text-gray-400 text-sm mb-4">Đăng nhập nhanh (Dev)</p>
             <div className="flex gap-3">
               <button
                 type="button"
                 onClick={() => quickLogin('admin')}
                 disabled={isLoading}
-                className="flex-1 flex items-center justify-center gap-2 py-2 px-4 bg-red-600 hover:bg-red-700 rounded-lg text-white transition-colors disabled:opacity-50"
+                className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-white transition-all duration-300 hover:shadow-lg disabled:opacity-50"
               >
-                <ShieldCheckIcon className="w-5 h-5" />
-                Admin
+                <ShieldCheckIcon className="w-5 h-5 text-red-400" />
+                <span className="font-medium">Admin</span>
               </button>
               <button
                 type="button"
                 onClick={() => quickLogin('demo')}
                 disabled={isLoading}
-                className="flex-1 flex items-center justify-center gap-2 py-2 px-4 bg-blue-600 hover:bg-blue-700 rounded-lg text-white transition-colors disabled:opacity-50"
+                className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-white transition-all duration-300 hover:shadow-lg disabled:opacity-50"
               >
-                <UserIcon className="w-5 h-5" />
-                Demo User
+                <UserIcon className="w-5 h-5 text-blue-400" />
+                <span className="font-medium">Demo</span>
               </button>
             </div>
           </div>
         </form>
-
-        {/* Social login (placeholder) */}
-        <div className="mt-6">
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-700"></div>
-            </div>
-            <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-gray-900 text-gray-500">Hoặc đăng nhập với</span>
-            </div>
-          </div>
-
-          <div className="mt-4 flex gap-3">
-            <button className="flex-1 flex items-center justify-center gap-2 py-2 px-4 border border-gray-700 rounded-lg text-gray-400 hover:bg-gray-800 transition-colors">
-              <svg className="w-5 h-5" viewBox="0 0 24 24">
-                <path fill="currentColor" d="M12.545,10.239v3.821h5.445c-0.712,2.315-2.647,3.972-5.445,3.972c-3.332,0-6.033-2.701-6.033-6.032 s2.701-6.032,6.033-6.032c1.498,0,2.866,0.549,3.921,1.453l2.814-2.814C17.503,2.988,15.139,2,12.545,2 C7.021,2,2.543,6.477,2.543,12s4.478,10,10.002,10c8.396,0,10.249-7.85,9.426-11.748L12.545,10.239z"/>
-              </svg>
-              Google
-            </button>
-            <button className="flex-1 flex items-center justify-center gap-2 py-2 px-4 border border-gray-700 rounded-lg text-gray-400 hover:bg-gray-800 transition-colors">
-              <svg className="w-5 h-5" viewBox="0 0 24 24">
-                <path fill="currentColor" d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.865 8.166 6.839 9.489.5.092.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.603-3.369-1.342-3.369-1.342-.454-1.155-1.11-1.462-1.11-1.462-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.831.092-.646.35-1.086.636-1.336-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0112 6.836c.85.004 1.705.114 2.504.336 1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.579.688.481C19.138 20.163 22 16.418 22 12c0-5.523-4.477-10-10-10z"/>
-              </svg>
-              GitHub
-            </button>
-          </div>
-        </div>
       </div>
     </div>
   )

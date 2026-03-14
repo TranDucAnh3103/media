@@ -265,8 +265,10 @@ const Upload = () => {
     <>
       <MobileHeader title="Upload" />
       
-      <div className="container-custom py-8 pt-16 md:pt-8 max-w-2xl mx-auto">
-        <h1 className="text-2xl md:text-3xl font-bold text-white mb-6">Upload nội dung</h1>
+      <div className="container-custom py-8 pt-16 md:pt-12 max-w-2xl mx-auto relative">
+        <div className="absolute inset-x-0 inset-y-4 md:inset-y-0 bg-white/[0.02] backdrop-blur-xl border border-white/5 rounded-3xl shadow-2xl shadow-black/40 pointer-events-none hidden md:block" />
+        <div className="relative z-10 p-0 md:p-8">
+          <h1 className="text-2xl md:text-3xl font-bold text-white mb-8 tracking-tight">Upload nội dung</h1>
 
         {/* Progress Bar - Luôn hiển thị khi đang upload hoặc đã upload xong */}
         {(uploadStatus === 'uploading' || uploadStatus === 'success') && (
@@ -321,36 +323,36 @@ const Upload = () => {
         )}
 
         {/* Type selector */}
-        <div className="flex gap-3 mb-6">
+        <div className="flex bg-white/[0.03] p-1.5 rounded-2xl border border-white/5 mb-8">
           <button
             onClick={() => setUploadType('video')}
             disabled={uploadStatus === 'uploading'}
-            className={`flex-1 flex items-center justify-center gap-2 py-4 rounded-xl border-2 transition-all ${
+            className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl transition-all duration-300 ${
               uploadType === 'video'
-                ? 'bg-violet-500/20 border-violet-500 text-violet-300'
-                : 'bg-white/5 border-white/10 text-gray-400 hover:border-white/20'
+                ? 'bg-white/10 text-white shadow-sm font-medium'
+                : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
             } ${uploadStatus === 'uploading' ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
-            <FilmIcon className="w-6 h-6" />
-            <span className="font-medium">Video</span>
+            <FilmIcon className="w-5 h-5" />
+            <span>Video</span>
           </button>
           <button
             onClick={() => setUploadType('comic')}
             disabled={uploadStatus === 'uploading'}
-            className={`flex-1 flex items-center justify-center gap-2 py-4 rounded-xl border-2 transition-all ${
+            className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl transition-all duration-300 ${
               uploadType === 'comic'
-                ? 'bg-violet-500/20 border-violet-500 text-violet-300'
-                : 'bg-white/5 border-white/10 text-gray-400 hover:border-white/20'
+                ? 'bg-white/10 text-white shadow-sm font-medium'
+                : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
             } ${uploadStatus === 'uploading' ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
-            <BookOpenIcon className="w-6 h-6" />
-            <span className="font-medium">Truyện</span>
+            <BookOpenIcon className="w-5 h-5" />
+            <span>Truyện</span>
           </button>
         </div>
 
         {/* Video Upload Form */}
         {uploadType === 'video' && (
-          <form onSubmit={handleVideoSubmit} className="space-y-6">
+          <form onSubmit={handleVideoSubmit} className="space-y-8">
             {/* Title */}
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
@@ -394,10 +396,10 @@ const Upload = () => {
                   onDragOver={handleDrag}
                   onDrop={handleVideoDrop}
                   className={`
-                    relative border-2 border-dashed rounded-xl p-8 text-center transition-all cursor-pointer
+                    relative border-2 border-dashed rounded-2xl p-10 text-center transition-all duration-300 cursor-pointer
                     ${dragActive 
-                      ? 'border-violet-500 bg-violet-500/10' 
-                      : 'border-white/20 hover:border-white/40'
+                      ? 'border-violet-500 bg-violet-500/10 shadow-[0_0_20px_rgba(139,92,246,0.15)]' 
+                      : 'border-white/10 bg-white/5 hover:border-violet-500/40 hover:bg-violet-500/5'
                     }
                     ${uploadStatus === 'uploading' ? 'opacity-50 pointer-events-none' : ''}
                   `}
@@ -460,7 +462,7 @@ const Upload = () => {
 
         {/* Comic Upload Form - Đơn giản hóa */}
         {uploadType === 'comic' && (
-          <form onSubmit={handleComicSubmit} className="space-y-6">
+          <form onSubmit={handleComicSubmit} className="space-y-8">
             {/* Title */}
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
@@ -506,10 +508,10 @@ const Upload = () => {
                 onDragOver={handleDrag}
                 onDrop={handleImagesDrop}
                 className={`
-                  relative border-2 border-dashed rounded-xl p-6 text-center transition-all cursor-pointer mb-4
+                  relative border-2 border-dashed rounded-2xl p-8 text-center transition-all duration-300 cursor-pointer mb-4
                   ${dragActive 
-                    ? 'border-violet-500 bg-violet-500/10' 
-                    : 'border-white/20 hover:border-white/40'
+                    ? 'border-violet-500 bg-violet-500/10 shadow-[0_0_20px_rgba(139,92,246,0.15)]' 
+                    : 'border-white/10 bg-white/5 hover:border-violet-500/40 hover:bg-violet-500/5'
                   }
                   ${uploadStatus === 'uploading' ? 'opacity-50 pointer-events-none' : ''}
                 `}
@@ -581,6 +583,7 @@ const Upload = () => {
             </button>
           </form>
         )}
+        </div>
       </div>
     </>
   )

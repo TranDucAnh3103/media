@@ -42,22 +42,23 @@ const ComicCard = ({ comic, showChapters = true }) => {
           <img
             src={comic.cover_image || '/placeholder-comic.png'}
             alt={comic.title}
-            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
+            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.05]"
             loading="lazy"
           />
-          
+
+          {/* Gradient Overlay for better contrast */}
+          <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/80 via-black/20 to-transparent pointer-events-none" />
+
           {/* Hover overlay */}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
-            <div className="absolute bottom-0 left-0 right-0 p-3">
-              <div className="flex items-center justify-center space-x-1 text-white">
-                <BookOpenIcon className="w-5 h-5" />
-                <span>Đọc ngay</span>
-              </div>
+          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
+            <div className="flex items-center justify-center gap-2 bg-white/90 px-4 py-2.5 rounded-full shadow-lg shadow-black/30 group-hover:scale-110 transition-transform duration-300">
+              <BookOpenIcon className="w-5 h-5 text-gray-900" />
+              <span className="text-gray-900 text-sm font-bold">Đọc ngay</span>
             </div>
           </div>
 
           {/* Status badge */}
-          <div className={`absolute top-2 left-2 px-2 py-0.5 ${getStatusColor(comic.status)} text-white text-xs font-medium rounded`}>
+          <div className={`absolute top-2.5 left-2.5 px-2.5 py-1 backdrop-blur-md bg-black/50 border border-white/10 text-white text-[10px] font-medium tracking-wide rounded-full shadow-sm`}>
             {/* {getStatusText(comic.status)} */}
             <p>Hoàn thành</p>
           </div>
@@ -71,36 +72,36 @@ const ComicCard = ({ comic, showChapters = true }) => {
         </div>
 
         {/* Info */}
-        <div className="p-3 flex-1 flex flex-col">
-          <h3 className="text-white font-medium truncate whitespace-nowrap group-hover:text-primary-400 transition-colors">
+        <div className="p-3.5 flex-1 flex flex-col">
+          <h3 className="text-gray-100 font-semibold truncate whitespace-nowrap group-hover:text-violet-400 transition-colors">
             {comic.title}
           </h3>
           
           {comic.author && (
-            <p className="text-sm text-gray-500 mt-1 truncate">
+            <p className="text-[11px] font-medium text-gray-400 mt-1 truncate">
               {comic.author}
             </p>
           )}
           
-          <div className="flex items-center justify-between mt-2 text-sm text-gray-400">
-            <span className="flex items-center space-x-1">
-              <EyeIcon className="w-4 h-4" />
+          <div className="flex items-center justify-between mt-1.5 text-[11px] font-medium text-gray-500">
+            <span className="flex items-center space-x-1.5">
+              <EyeIcon className="w-3.5 h-3.5" />
               <span>{formatViews(comic.views)}</span>
             </span>
             
             {comic.rating > 0 && (
-              <span className="flex items-center space-x-1">
-                <StarIcon className="w-4 h-4 text-yellow-400" />
-                <span>{comic.rating.toFixed(1)}</span>
+              <span className="flex items-center space-x-1.5">
+                <StarIcon className="w-3.5 h-3.5 text-yellow-500" />
+                <span className="text-gray-400">{comic.rating.toFixed(1)}</span>
               </span>
             )}
           </div>
 
           {/* Genres */}
           {comic.genres && comic.genres.length > 0 && (
-            <div className="flex flex-wrap gap-1 mt-2">
+            <div className="flex flex-wrap gap-1.5 mt-2.5">
               {comic.genres.slice(0, 2).map((genre, index) => (
-                <span key={index} className="badge-secondary text-xs">
+                <span key={index} className="px-2 py-0.5 rounded-full bg-white/5 border border-white/5 text-[10px] text-gray-400">
                   {genre}
                 </span>
               ))}

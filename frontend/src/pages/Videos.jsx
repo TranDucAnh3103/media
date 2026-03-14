@@ -46,19 +46,19 @@ const Videos = () => {
   return (
     <div className="container-custom py-8">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
-        <h1 className="text-3xl font-bold text-white">Videos</h1>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10">
+        <h1 className="text-3xl font-bold text-white tracking-tight">Videos</h1>
         
         {/* Search */}
-        <form onSubmit={handleSearch} className="relative flex-1 md:w-80 md:max-w-md">
+        <form onSubmit={handleSearch} className="relative flex-1 md:w-auto md:min-w-[320px] max-w-md">
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Tìm kiếm video..."
-            className="input pr-10"
+            className="w-full px-5 py-2.5 bg-white/5 border border-white/10 rounded-full text-sm text-white placeholder-gray-500 focus:outline-none focus:bg-white/10 focus:border-violet-500/50 focus:ring-2 focus:ring-violet-500/20 transition-all shadow-inner shadow-black/20 pr-12"
           />
-          <button type="submit" className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white">
+          <button type="submit" className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white transition-colors">
             <MagnifyingGlassIcon className="w-5 h-5" />
           </button>
         </form>
@@ -87,23 +87,23 @@ const Videos = () => {
 
           {/* Pagination */}
           {data.total_pages > 1 && (
-            <div className="flex justify-center mt-8 gap-2">
+            <div className="flex justify-center mt-10 gap-3">
               <button
                 disabled={page <= 1}
                 onClick={() => updateParams('page', String(page - 1))}
-                className="btn-secondary disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-6 py-2 rounded-full bg-white/5 border border-white/10 text-sm text-white font-medium backdrop-blur-sm transition-all hover:bg-white/15 hover:border-white/20 hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Trước
               </button>
               
-              <span className="flex items-center px-4 text-gray-400">
+              <span className="flex items-center px-4 text-sm text-gray-400 font-medium">
                 Trang {page} / {data.total_pages}
               </span>
               
               <button
                 disabled={page >= data.total_pages}
                 onClick={() => updateParams('page', String(page + 1))}
-                className="btn-secondary disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-6 py-2 rounded-full bg-white/5 border border-white/10 text-sm text-white font-medium backdrop-blur-sm transition-all hover:bg-white/15 hover:border-white/20 hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Sau
               </button>

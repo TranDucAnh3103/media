@@ -73,9 +73,9 @@ const Home = () => {
         <div className="relative h-full container-custom flex items-end pb-8 md:pb-12">
           <div className="max-w-2xl">
             {/* Badge */}
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-violet-500/20 backdrop-blur-sm border border-violet-500/30 rounded-full mb-4">
-              <span className="w-2 h-2 bg-violet-400 rounded-full animate-pulse" />
-              <span className="text-sm text-violet-300 font-medium">Mới nhất</span>
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 backdrop-blur-md bg-black/40 border border-violet-500/30 rounded-full mb-5 shadow-sm shadow-violet-500/10">
+              <span className="w-2 h-2 bg-violet-400 rounded-full animate-pulse shadow-[0_0_8px_rgba(167,139,250,0.8)]" />
+              <span className="text-xs text-violet-300 font-semibold tracking-wide uppercase">Mới nhất</span>
             </div>
 
             {/* Title */}
@@ -89,19 +89,19 @@ const Home = () => {
             </p>
 
             {/* Actions */}
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-wrap gap-4 mt-2">
               {heroComic ? (
                 <>
                   <Link
                     to={`/comics/${heroComic.id}`}
-                    className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white font-semibold rounded-xl hover:shadow-lg hover:shadow-violet-500/25 transition-all"
+                    className="inline-flex items-center gap-2 px-7 py-3.5 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white font-semibold rounded-full hover:scale-105 hover:shadow-[0_4px_20px_rgba(139,92,246,0.4)] transition-all duration-300"
                   >
                     <PlayIcon className="w-5 h-5" />
                     Đọc ngay
                   </Link>
                   <Link
                     to="/comics"
-                    className="px-6 py-3 bg-white/10 backdrop-blur-sm text-white font-semibold rounded-xl border border-white/20 hover:bg-white/20 transition-all"
+                    className="inline-flex items-center justify-center px-7 py-3.5 bg-white/5 backdrop-blur-md border border-white/10 text-white font-medium rounded-full hover:bg-white/15 hover:border-white/20 hover:shadow-lg transition-all duration-300"
                   >
                     Xem tất cả truyện
                   </Link>
@@ -126,14 +126,16 @@ const Home = () => {
 
       {/* Trending Comics */}
       <section className="container-custom py-8 pb-12">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl md:text-2xl font-bold text-white flex items-center space-x-2">
-            <FireIcon className="w-6 h-6 md:w-7 md:h-7 text-orange-500" />
+        <div className="flex items-center justify-between mb-8">
+          <h2 className="text-2xl md:text-3xl font-bold text-white tracking-tight flex items-center gap-3">
+            <div className="p-2 bg-orange-500/10 rounded-xl">
+              <FireIcon className="w-6 h-6 md:w-7 md:h-7 text-orange-500" />
+            </div>
             <span>Truyện Hot</span>
           </h2>
-          <Link to="/comics" className="flex items-center text-violet-400 hover:text-violet-300 text-sm md:text-base">
+          <Link to="/comics" className="flex items-center gap-1 text-sm md:text-base font-medium text-violet-400 hover:text-violet-300 transition-colors group">
             <span>Xem tất cả</span>
-            <ChevronRightIcon className="w-5 h-5" />
+            <ChevronRightIcon className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
           </Link>
         </div>
 
@@ -159,15 +161,17 @@ const Home = () => {
       </section>
 
       {/* Trending Videos */}
-      <section className="container-custom py-8">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl md:text-2xl font-bold text-white flex items-center space-x-2">
-            <FireIcon className="w-6 h-6 md:w-7 md:h-7 text-orange-500" />
+      <section className="container-custom py-8 mb-8">
+        <div className="flex items-center justify-between mb-8">
+          <h2 className="text-2xl md:text-3xl font-bold text-white tracking-tight flex items-center gap-3">
+            <div className="p-2 bg-pink-500/10 rounded-xl">
+              <FireIcon className="w-6 h-6 md:w-7 md:h-7 text-pink-500" />
+            </div>
             <span>Videos Trending</span>
           </h2>
-          <Link to="/videos" className="flex items-center text-violet-400 hover:text-violet-300 text-sm md:text-base">
+          <Link to="/videos" className="flex items-center gap-1 text-sm md:text-base font-medium text-violet-400 hover:text-violet-300 transition-colors group">
             <span>Xem tất cả</span>
-            <ChevronRightIcon className="w-5 h-5" />
+            <ChevronRightIcon className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
           </Link>
         </div>
 

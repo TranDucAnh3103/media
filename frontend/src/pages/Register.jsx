@@ -77,7 +77,7 @@ const Register = () => {
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="bg-gray-800 rounded-xl p-6 shadow-xl">
+        <form onSubmit={handleSubmit} className="bg-white/[0.03] backdrop-blur-xl rounded-3xl p-6 md:p-8 shadow-2xl border border-white/5 relative z-10">
           {/* Username */}
           <div className="mb-4">
             <label className="block text-sm text-gray-400 mb-1">Tên đăng nhập</label>
@@ -87,7 +87,7 @@ const Register = () => {
                 type="text"
                 value={form.username}
                 onChange={(e) => setForm({ ...form, username: e.target.value })}
-                className={`input pl-10 ${errors.username ? 'border-red-500' : ''}`}
+                className={`input pl-11 h-12 rounded-xl bg-white/5 border border-white/10 text-white placeholder-gray-500 focus:bg-white/10 focus:border-violet-500/50 transition-all ${errors.username ? 'border-red-500/50 focus:border-red-500' : ''}`}
                 placeholder="username"
                 autoComplete="username"
               />
@@ -106,7 +106,7 @@ const Register = () => {
                 type="email"
                 value={form.email}
                 onChange={(e) => setForm({ ...form, email: e.target.value })}
-                className={`input pl-10 ${errors.email ? 'border-red-500' : ''}`}
+                className={`input pl-11 h-12 rounded-xl bg-white/5 border border-white/10 text-white placeholder-gray-500 focus:bg-white/10 focus:border-violet-500/50 transition-all ${errors.email ? 'border-red-500/50 focus:border-red-500' : ''}`}
                 placeholder="email@example.com"
                 autoComplete="email"
               />
@@ -125,7 +125,7 @@ const Register = () => {
                 type="password"
                 value={form.password}
                 onChange={(e) => setForm({ ...form, password: e.target.value })}
-                className={`input pl-10 ${errors.password ? 'border-red-500' : ''}`}
+                className={`input pl-11 h-12 rounded-xl bg-white/5 border border-white/10 text-white placeholder-gray-500 focus:bg-white/10 focus:border-violet-500/50 transition-all ${errors.password ? 'border-red-500/50 focus:border-red-500' : ''}`}
                 placeholder="••••••••"
                 autoComplete="new-password"
               />
@@ -144,7 +144,7 @@ const Register = () => {
                 type="password"
                 value={form.confirmPassword}
                 onChange={(e) => setForm({ ...form, confirmPassword: e.target.value })}
-                className={`input pl-10 ${errors.confirmPassword ? 'border-red-500' : ''}`}
+                className={`input pl-11 h-12 rounded-xl bg-white/5 border border-white/10 text-white placeholder-gray-500 focus:bg-white/10 focus:border-violet-500/50 transition-all ${errors.confirmPassword ? 'border-red-500/50 focus:border-red-500' : ''}`}
                 placeholder="••••••••"
                 autoComplete="new-password"
               />
@@ -179,7 +179,7 @@ const Register = () => {
           <button
             type="submit"
             disabled={isLoading}
-            className="btn-primary w-full disabled:opacity-50"
+            className="w-full flex justify-center mt-2 py-3.5 px-4 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:scale-[1.02] hover:shadow-[0_4px_20px_rgba(139,92,246,0.4)] transition-all duration-300 disabled:opacity-50 disabled:hover:scale-100"
           >
             {isLoading ? 'Đang đăng ký...' : 'Đăng ký'}
           </button>

@@ -40,7 +40,7 @@ const BottomNav = () => {
       <div className="absolute inset-0 bg-black/80 backdrop-blur-xl border-t border-white/10 pointer-events-none" />
       
       {/* Safe area padding for iPhone notch */}
-      <div className="relative flex items-center justify-around h-16 pb-safe">
+      <div className="relative flex items-center justify-around h-[4.5rem] pb-safe px-2">
         {tabs.map((tab) => {
           const active = isActive(tab.href)
           const Icon = active ? tab.iconActive : tab.icon
@@ -53,36 +53,36 @@ const BottomNav = () => {
             <NavLink
               key={tab.name}
               to={linkHref}
-              className={`flex flex-col items-center justify-center w-16 h-full transition-all duration-200 ${
-                tab.special ? 'relative -mt-4' : ''
+              className={`flex flex-col items-center justify-center w-16 h-full relative transition-all duration-300 ${
+                tab.special ? '-mt-6 z-10' : ''
               }`}
             >
               {tab.special ? (
-                // Special upload button
-                <div className={`w-12 h-12 rounded-full flex items-center justify-center shadow-lg transition-all duration-300 ${
+                // Special upload FAB
+                <div className={`w-14 h-14 rounded-full flex items-center justify-center transition-all duration-300 shadow-[0_4px_15px_rgba(139,92,246,0.3)] ${
                   active 
-                    ? 'bg-gradient-to-r from-violet-500 to-fuchsia-500 scale-110' 
-                    : 'bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:scale-105'
+                    ? 'bg-gradient-to-r from-violet-500 to-fuchsia-500 scale-105 shadow-[0_4px_20px_rgba(217,70,239,0.5)]' 
+                    : 'bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:scale-110 hover:shadow-[0_4px_25px_rgba(139,92,246,0.6)]'
                 }`}>
-                  <Icon className="w-6 h-6 text-white" />
+                  <Icon className="w-7 h-7 text-white" />
                 </div>
               ) : (
-                <>
-                  <Icon className={`w-6 h-6 transition-all duration-200 ${
-                    active 
-                      ? 'text-white scale-110' 
-                      : 'text-gray-500'
-                  }`} />
-                  <span className={`text-[10px] mt-1 font-medium transition-colors ${
-                    active ? 'text-white' : 'text-gray-500'
+                <div className="flex flex-col items-center justify-center w-full h-full group relative pb-1">
+                  <div className={`relative transition-all duration-300 ${active ? 'scale-110 -translate-y-1' : 'group-hover:scale-110'}`}>
+                    <Icon className={`w-6 h-6 transition-all duration-300 ${
+                      active ? 'text-violet-400' : 'text-gray-500 group-hover:text-gray-300'
+                    }`} />
+                  </div>
+                  <span className={`text-[10px] font-medium transition-all duration-300 ${
+                    active ? 'text-violet-400 opacity-100 translate-y-0' : 'text-gray-500 opacity-80'
                   }`}>
                     {tab.name}
                   </span>
-                  {/* Active indicator */}
+                  {/* Subtle Dot Indicator */}
                   {active && (
-                    <div className="absolute -top-0.5 w-6 h-0.5 bg-gradient-to-r from-violet-500 to-fuchsia-500 rounded-full" />
+                    <div className="absolute bottom-1 w-1.5 h-1.5 bg-violet-400 rounded-full shadow-[0_0_8px_rgba(167,139,250,0.8)]" />
                   )}
-                </>
+                </div>
               )}
             </NavLink>
           )

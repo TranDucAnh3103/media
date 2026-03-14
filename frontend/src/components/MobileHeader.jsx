@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { ArrowLeftIcon } from '@heroicons/react/24/outline'
 
 /**
@@ -7,8 +7,23 @@ import { ArrowLeftIcon } from '@heroicons/react/24/outline'
  */
 const MobileHeader = ({ title, showTitle = true, transparent = false }) => {
   const navigate = useNavigate()
+  const location = useLocation()
 
   const handleBack = () => {
+    // Smart back logic to prevent history loops (e.g., when reading comics and going back)
+    const isComicDetail = location.pathname.match(/^\/comics\/[^/]+$/)
+    const isVideoDetail = location.pathname.match(/^\/videos\/[^/]+$/)
+
+    if (isComicDetail) {
+      navigate('/comics')
+      return
+    }
+
+    if (isVideoDetail) {
+      navigate('/videos')
+      return
+    }
+
     // Nếu có history thì quay lại, không thì về home
     if (window.history.length > 2) {
       navigate(-1)
@@ -23,7 +38,7 @@ const MobileHeader = ({ title, showTitle = true, transparent = false }) => {
         fixed top-0 left-0 right-0 z-50 md:hidden
         ${transparent
           ? 'bg-gradient-to-b from-black/80 to-transparent'
-          : 'bg-gray-950/95 backdrop-blur-xl border-b border-white/5'
+          : 'bg-gray-950/80 backdrop-blur-xl border-b border-white/5'
         }
       `}
     >
@@ -31,10 +46,10 @@ const MobileHeader = ({ title, showTitle = true, transparent = false }) => {
         {/* Back button */}
         <button
           onClick={handleBack}
-          className="flex items-center justify-center w-10 h-10 -ml-2 rounded-full hover:bg-white/10 active:scale-95 transition-all"
+          className="flex items-center justify-center w-10 h-10 -ml-2 rounded-full hover:bg-white/10 active:bg-white/5 transition-all"
           aria-label="Quay lại"
         >
-          <ArrowLeftIcon className="w-6 h-6 text-white" />
+          <ArrowLeftIcon className="w-6 h-6 text-white group-active:-translate-x-1 transition-transform" />
         </button>
 
         {/* Logo + Title */}
