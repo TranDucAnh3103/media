@@ -305,43 +305,18 @@ const Profile = () => {
 
               {/* Info */}
               <div className="flex-1 text-center sm:text-left">
-                {editMode ? (
-                  <div style={{ maxWidth: 320 }} className="space-y-3">
-                    <input
-                      type="text"
-                      value={profileForm.username}
-                      onChange={(e) => setProfileForm({ ...profileForm, username: e.target.value })}
-                      className="profile-input"
-                      placeholder="Username"
-                    />
-                    <input
-                      type="url"
-                      value={profileForm.avatar}
-                      onChange={(e) => setProfileForm({ ...profileForm, avatar: e.target.value })}
-                      className="profile-input"
-                      placeholder="URL avatar"
-                    />
-                    <div className="flex gap-3 mt-2">
-                      <button onClick={() => updateMutation.mutate(profileForm)} className="px-6 py-2 bg-gradient-to-r from-violet-600 to-fuchsia-600 rounded-full font-semibold shadow-[0_4px_20px_rgba(139,92,246,0.3)] hover:scale-105 transition-all text-sm" disabled={updateMutation.isLoading}>Lưu</button>
-                      <button onClick={() => setEditMode(false)} className="px-6 py-2 bg-white/5 border border-white/10 rounded-full font-medium text-gray-300 hover:bg-white/10 transition-all text-sm">Hủy</button>
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <div className="flex items-center justify-center sm:justify-start gap-2 mb-1">
-                      <h1 style={{ fontSize: 24, fontWeight: 800, letterSpacing: '-0.3px' }}>{user?.username}</h1>
-                      <span className="verified-badge">
-                        <svg viewBox="0 0 12 12" fill="none" style={{ width: 9, height: 9 }}>
-                          <path d="M2 6l2.5 2.5L10 3" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                      </span>
-                    </div>
-                    <p style={{ color: 'rgba(255,255,255,0.45)', fontSize: 13, marginBottom: 4 }}>{user?.email}</p>
-                    <p style={{ color: 'rgba(255,255,255,0.25)', fontSize: 12 }}>
-                      Tham gia: {formatDate(user?.created_at)}
-                    </p>
-                  </>
-                )}
+                <div className="flex items-center justify-center sm:justify-start gap-2 mb-1">
+                  <h1 style={{ fontSize: 24, fontWeight: 800, letterSpacing: '-0.3px' }}>{user?.username}</h1>
+                  <span className="verified-badge">
+                    <svg viewBox="0 0 12 12" fill="none" style={{ width: 9, height: 9 }}>
+                      <path d="M2 6l2.5 2.5L10 3" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </span>
+                </div>
+                <p style={{ color: 'rgba(255,255,255,0.45)', fontSize: 13, marginBottom: 4 }}>{user?.email}</p>
+                <p style={{ color: 'rgba(255,255,255,0.25)', fontSize: 12 }}>
+                  Tham gia: {formatDate(user?.created_at)}
+                </p>
               </div>
 
               {/* Stats — desktop row */}
@@ -360,19 +335,14 @@ const Profile = () => {
             </div>
 
             {/* Action buttons row */}
-            {!editMode && (
-              <div className="flex flex-wrap gap-3 mt-8 justify-center sm:justify-start">
-                <button onClick={() => setEditMode(true)} className="px-6 py-2.5 bg-gradient-to-r from-violet-600 to-fuchsia-600 rounded-full font-semibold shadow-[0_4px_20px_rgba(139,92,246,0.3)] hover:scale-105 transition-all flex items-center gap-2 text-sm">
-                  ✏️ Chỉnh sửa
-                </button>
-                <Link to="/dashboard" className="px-6 py-2.5 bg-white/5 border border-white/10 rounded-full font-medium text-gray-300 hover:bg-white/10 transition-all flex items-center gap-2 text-sm">
-                  <Squares2X2Icon style={{ width: 18, height: 18 }} /> Dashboard
-                </Link>
-                <button onClick={handleLogout} className="px-6 py-2.5 bg-red-500/10 border border-red-500/20 text-red-400 rounded-full font-medium hover:bg-red-500/20 transition-all flex items-center gap-2 text-sm">
-                  <ArrowRightOnRectangleIcon style={{ width: 18, height: 18 }} /> Đăng xuất
-                </button>
-              </div>
-            )}
+            <div className="flex flex-wrap gap-3 mt-8 justify-center sm:justify-start">
+              <Link to="/dashboard" className="px-6 py-2.5 bg-white/5 border border-white/10 rounded-full font-medium text-gray-300 hover:bg-white/10 transition-all flex items-center gap-2 text-sm">
+                <Squares2X2Icon style={{ width: 18, height: 18 }} /> Dashboard
+              </Link>
+              <button onClick={handleLogout} className="px-6 py-2.5 bg-red-500/10 border border-red-500/20 text-red-400 rounded-full font-medium hover:bg-red-500/20 transition-all flex items-center gap-2 text-sm">
+                <ArrowRightOnRectangleIcon style={{ width: 18, height: 18 }} /> Đăng xuất
+              </button>
+            </div>
           </div>
 
           {/* ═══════════════════════════════════════
@@ -557,6 +527,44 @@ const Profile = () => {
               <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 20 }} className="grad-text">Cài đặt tài khoản</h2>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+                {/* Edit Profile */}
+                <div className="settings-section">
+                  <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <UserCircleIcon style={{ width: 18, height: 18, color: '#a78bfa' }} />
+                    Chỉnh sửa hồ sơ
+                  </h3>
+                  <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', marginBottom: 16, lineHeight: '1.6' }}>
+                    Cập nhật tên hiển thị và ảnh đại diện của bạn.
+                  </p>
+
+                  {editMode ? (
+                    <div className="space-y-3">
+                      <input
+                        type="text"
+                        value={profileForm.username}
+                        onChange={(e) => setProfileForm({ ...profileForm, username: e.target.value })}
+                        className="profile-input"
+                        placeholder="Username"
+                      />
+                      <input
+                        type="url"
+                        value={profileForm.avatar}
+                        onChange={(e) => setProfileForm({ ...profileForm, avatar: e.target.value })}
+                        className="profile-input"
+                        placeholder="URL avatar"
+                      />
+                      <div className="flex gap-3 mt-2">
+                        <button onClick={() => updateMutation.mutate(profileForm)} className="px-6 py-2.5 bg-gradient-to-r from-violet-600 to-fuchsia-600 rounded-full font-semibold shadow-[0_4px_20px_rgba(139,92,246,0.3)] hover:scale-105 transition-all text-sm" disabled={updateMutation.isLoading}>Lưu</button>
+                        <button onClick={() => setEditMode(false)} className="px-6 py-2.5 bg-white/5 border border-white/10 rounded-full font-medium text-gray-300 hover:bg-white/10 transition-all text-sm">Hủy</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button onClick={() => setEditMode(true)} className="px-6 py-2.5 bg-gradient-to-r from-violet-600 to-fuchsia-600 rounded-full font-semibold shadow-[0_4px_20px_rgba(139,92,246,0.3)] hover:scale-105 transition-all flex items-center gap-2 text-sm">
+                      ✏️ Chỉnh sửa
+                    </button>
+                  )}
+                </div>
 
                 {/* Telegram Sync */}
                 <div className="settings-section">
